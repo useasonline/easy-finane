@@ -259,13 +259,31 @@ async function handleRegister(event) {
 
   if (submitBtn) {
     submitBtn.disabled = true;
-    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating Account & Syncing to Firebase...';
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Account to Firebase Database...';
   }
 
   try {
     await ensureFirebaseAuth();
 
-    // 1. Check if Username exists in Firebase RTDB
+    // 1. Register with Firebase Authentication if available
+    if (auth) {
+      try {
+        await auth.createUserWithEmailAndPassword(email, password);
+      } catch (authErr) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          errorDiv.textContent = `Email '${email}' is already registered. Please login instead.`;
+          errorDiv.classList.remove('hidden');
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+          }
+          return;
+        }
+        console.warn("Firebase Auth create note:", authErr.message);
+      }
+    }
+
+    // 2. Check if Username already exists in Firebase RTDB
     let usernameExists = false;
     try {
       const uSnap = await db.ref('users/' + username).once('value');
@@ -282,7 +300,7 @@ async function handleRegister(event) {
     }
 
     if (usernameExists) {
-      errorDiv.textContent = `Username '@${username}' is already taken. Please choose another.`;
+      errorDiv.textContent = `Username '@${username}' is already taken. Please choose another username.`;
       errorDiv.classList.remove('hidden');
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -291,7 +309,7 @@ async function handleRegister(event) {
       return;
     }
 
-    // 2. Check if Email already exists in Firebase RTDB
+    // 3. Check if Email already exists in Firebase RTDB
     let emailExists = false;
     try {
       const allUsersSnap = await db.ref('users').once('value');
@@ -329,15 +347,15 @@ async function handleRegister(event) {
       createdAt: new Date().toISOString()
     };
 
-    // 3. Write directly to Firebase Realtime Database FIRST to guarantee cloud availability
+    // 4. MUST WRITE TO FIREBASE REALTIME DATABASE TO GUARANTEE CLOUD ACCESS
     await db.ref('users/' + username).set(userData);
 
-    // Sync to local DB cache for offline fallback
+    // Save local copy for cache
     const localUsers = getLocalStore('users');
     localUsers[username] = userData;
     setLocalStore('users', localUsers);
 
-    successDiv.textContent = '✓ Account created successfully in Database! Logging you in...';
+    successDiv.textContent = '✓ Account successfully saved to Firebase Database! Logging you in...';
     successDiv.classList.remove('hidden');
 
     currentUser = userData;
@@ -352,39 +370,22 @@ async function handleRegister(event) {
         submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
       }
       navigateTo('home');
-      showToast(`Welcome to E Finance, ${fullName}! Account active on all devices.`, 'success');
+      showToast(`Welcome to E Finance, ${fullName}! Your account can now be accessed on any device.`, 'success');
     }, 1000);
 
   } catch (err) {
     console.error("Firebase registration error:", err);
+    let errMsg = err.message || 'Could not connect to Firebase database.';
+    if (err.code === 'PERMISSION_DENIED' || errMsg.includes('PERMISSION_DENIED') || errMsg.includes('Permission denied')) {
+      errMsg = 'Firebase Database Permission Denied. Please ensure your Firebase Realtime Database Security Rules allow read/write access (e.g., { ".read": true, ".write": true }).';
+    }
 
-    // Fallback: If Firebase DB network write fails, save locally and inform user
-    const userData = {
-      fullName: fullName,
-      contactNumber: contactNumber,
-      username: username,
-      email: email,
-      password: password,
-      availableBalance: 0.00,
-      lockedDebitBalance: 0.00,
-      createdAt: new Date().toISOString()
-    };
-
-    const localUsers = getLocalStore('users');
-    localUsers[username] = userData;
-    setLocalStore('users', localUsers);
-
-    currentUser = userData;
-    localStorage.setItem('efinance_current_user', JSON.stringify(userData));
-    updateHeaderGreeting();
-
+    errorDiv.textContent = `❌ Database Error: ${errMsg}`;
+    errorDiv.classList.remove('hidden');
     if (submitBtn) {
       submitBtn.disabled = false;
       submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
     }
-
-    navigateTo('home');
-    showToast(`Account created (Offline Mode). Cloud sync will retry when online.`, 'warning');
   }
 }
 
@@ -414,6 +415,15 @@ async function handleLogin(event) {
 
   try {
     await ensureFirebaseAuth();
+
+    // Try signing in via Firebase Auth if userInput is email
+    if (auth && userInput.includes('@')) {
+      try {
+        await auth.signInWithEmailAndPassword(userInput, password);
+      } catch (authErr) {
+        console.warn("Auth signInWithEmailAndPassword note:", authErr.message);
+      }
+    }
 
     let matchedUser = null;
 
