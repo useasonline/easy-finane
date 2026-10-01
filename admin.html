@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E Finance - Admin Control Portal</title>
+  <link rel="icon" type="image/png" href="logo.png">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Firebase JS SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-content">
+      <div class="brand-logo" onclick="location.href='index.html'">
+        <img src="logo.png" alt="Dollar Flow Logo" class="header-logo-img">
+        <div class="brand-text">
+          <span class="brand-name">E Finance</span>
+          <span class="brand-sub">Admin Portal</span>
+        </div>
+      </div>
+
+      <div class="nav-actions">
+        <span class="admin-card-badge"><i class="fa-solid fa-user-shield"></i> System Admin</span>
+        <a href="index.html" class="btn-secondary-sm"><i class="fa-solid fa-house"></i> User Website</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- ADMIN LOGIN VIEW -->
+  <section id="admin-login-section" class="page-view active">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="auth-logo-box">
+          <img src="logo.png" alt="E Finance Logo" class="auth-logo-img">
+        </div>
+        <h2>Admin Portal Access</h2>
+        <p>Enter Administrator credentials to manage user accounts & payout approvals</p>
+      </div>
+
+      <form id="form-admin-login" onsubmit="handleAdminLogin(event)">
+        <div class="form-group">
+          <label for="admin-passcode"><i class="fa-solid fa-key"></i> Admin Passcode / Password</label>
+          <div class="input-with-icon">
+            <input type="password" id="admin-passcode" placeholder="Enter admin passcode (Default: admin123)" required>
+            <i class="fa-solid fa-eye toggle-pw" onclick="togglePasswordVisibility('admin-passcode', this)"></i>
+          </div>
+          <small class="input-hint">Default Admin Passcode: <strong>admin123</strong></small>
+        </div>
+
+        <div id="admin-login-error" class="alert-box alert-error hidden"></div>
+
+        <button type="submit" class="btn-primary full-width">
+          <i class="fa-solid fa-right-to-bracket"></i> Login to Admin Dashboard
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- ADMIN DASHBOARD VIEW -->
+  <section id="admin-dashboard-section" class="page-view">
+    <div class="dashboard-container">
+      
+      <div class="admin-header">
+        <div>
+          <h2><i class="fa-solid fa-shield-halved text-gold"></i> Administrator Control Panel</h2>
+          <p>Real-time User Management, Bonus Allocation & Payout Status Approvals</p>
+        </div>
+        <button class="btn-danger-sm" onclick="handleAdminLogout()">
+          <i class="fa-solid fa-power-off"></i> Logout Admin
+        </button>
+      </div>
+
+      <!-- ADMIN METRICS CARDS -->
+      <div class="admin-stats-grid">
+        <div class="admin-stat-card">
+          <div class="stat-icon gold"><i class="fa-solid fa-users"></i></div>
+          <div class="stat-details">
+            <span class="stat-title">Registered Users</span>
+            <span id="stat-total-users" class="stat-value">0</span>
+          </div>
+        </div>
+
+        <div class="admin-stat-card">
+          <div class="stat-icon green"><i class="fa-solid fa-vault"></i></div>
+          <div class="stat-details">
+            <span class="stat-title">Total System Debits</span>
+            <span class="stat-value">₹<span id="stat-total-debits">0</span></span>
+          </div>
+        </div>
+
+        <div class="admin-stat-card">
+          <div class="stat-icon orange"><i class="fa-solid fa-clock-rotate-left"></i></div>
+          <div class="stat-details">
+            <span class="stat-title">Pending Withdrawals</span>
+            <span id="stat-pending-withdrawals" class="stat-value">0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION: PENDING WITHDRAWALS APPROVAL -->
+      <div class="dash-section">
+        <div class="section-header">
+          <h3><i class="fa-solid fa-cash-register text-gold"></i> Pending Withdrawal Requests (Action Required)</h3>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Req ID</th>
+                <th>User / Username</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Payment Method</th>
+                <th>Account / UPI Details</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-withdrawals-tbody">
+              <tr>
+                <td colspan="8" class="text-center py-4">Loading withdrawal requests...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SECTION: USER ACCOUNTS & CREDIT MONTHLY BONUS -->
+      <div class="dash-section margin-top">
+        <div class="section-header">
+          <h3><i class="fa-solid fa-users-gear text-green"></i> Registered Accounts & Credit Monthly Bonus</h3>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>Full Name</th>
+                <th>Contact</th>
+                <th>Total Debited (Principal)</th>
+                <th>Available Balance (Bonus)</th>
+                <th>Credit Bonus Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-users-tbody">
+              <tr>
+                <td colspan="6" class="text-center py-4">Loading user accounts...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Admin JS Script -->
+  <script src="admin.js"></script>
+</body>
+</html>
