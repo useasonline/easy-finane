@@ -30,10 +30,18 @@ function setLocalStore(key, data) {
   try { localStorage.setItem('efinance_db_' + key, JSON.stringify(data)); } catch(e) {}
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (auth) {
-    auth.signInAnonymously().catch(err => console.warn("Admin anon auth note:", err.message));
+async function ensureFirebaseAuth() {
+  if (auth && !auth.currentUser) {
+    try {
+      await auth.signInAnonymously();
+    } catch (err) {
+      console.warn("Admin anon auth note:", err.message);
+    }
   }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await ensureFirebaseAuth();
 
   const adminSession = localStorage.getItem('efinance_admin_session');
   if (adminSession === 'active') {
@@ -83,7 +91,8 @@ function handleAdminLogout() {
   showToast('Admin logged out.', 'info');
 }
 
-function showAdminDashboard() {
+async function showAdminDashboard() {
+  await ensureFirebaseAuth();
   document.getElementById('admin-login-section').classList.remove('active');
   document.getElementById('admin-dashboard-section').classList.add('active');
   loadAdminData();

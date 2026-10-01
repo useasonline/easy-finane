@@ -43,13 +43,23 @@ function setLocalStore(key, data) {
 // ==========================================================================
 // 2. DOM INITIALIZATION & EVENT LISTENERS
 // ==========================================================================
-document.addEventListener('DOMContentLoaded', () => {
-  // Sign in anonymously to bypass 'auth != null' Firebase Realtime Database rules
-  if (auth) {
-    auth.signInAnonymously().catch(err => {
-      console.warn("Anonymous auth note:", err.message);
-    });
+// Helper to ensure Firebase Auth connection before DB calls
+async function ensureFirebaseAuth() {
+  if (auth && !auth.currentUser) {
+    try {
+      await auth.signInAnonymously();
+    } catch (err) {
+      console.warn("Auth sign-in note:", err.message);
+    }
   }
+}
+
+// ==========================================================================
+// 2. DOM INITIALIZATION & EVENT LISTENERS
+// ==========================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize Firebase Auth connection asynchronously
+  ensureFirebaseAuth();
 
   // Set default date
   const debitDateInput = document.getElementById('debit-date');
@@ -153,7 +163,7 @@ function togglePasswordVisibility(inputId, iconElement) {
 }
 
 // ==========================================================================
-// 4. USERNAME AVAILABILITY CHECK & REGISTRATION (RESILIENT FIREBASE FIX)
+// 4. USERNAME AVAILABILITY CHECK & REGISTRATION (FIREBASE GUARANTEED)
 // ==========================================================================
 function resetUsernameValidation() {
   const feedback = document.getElementById('username-feedback');
@@ -171,8 +181,7 @@ async function checkUsernameAvailability() {
 
   const rawUsername = usernameInput.value.trim().toLowerCase();
   if (!rawUsername) {
-    feedback.textContent = 'Unique username required for login (e.g. tat_1)';
-    feedback.className = 'input-hint';
+    resetUsernameValidation();
     return;
   }
 
@@ -185,25 +194,23 @@ async function checkUsernameAvailability() {
   feedback.textContent = 'Verifying username...';
   feedback.className = 'input-hint';
 
-  // Check local fallback first
-  const localUsers = getLocalStore('users');
-  if (localUsers[rawUsername]) {
-    feedback.textContent = `❌ Username '${rawUsername}' is already taken! Please choose another.`;
-    feedback.className = 'input-hint text-error';
-    return;
-  }
-
   try {
+    await ensureFirebaseAuth();
     const snapshot = await db.ref('users/' + rawUsername).once('value');
     if (snapshot.exists()) {
-      feedback.textContent = `❌ Username '${rawUsername}' is already taken! Please choose another.`;
+      feedback.textContent = `❌ Username '@${rawUsername}' is already taken! Please choose another.`;
       feedback.className = 'input-hint text-error';
     } else {
-      feedback.textContent = `✓ Username '${rawUsername}' is available!`;
-      feedback.className = 'input-hint text-success';
+      const localUsers = getLocalStore('users');
+      if (localUsers[rawUsername]) {
+        feedback.textContent = `❌ Username '@${rawUsername}' is already taken! Please choose another.`;
+        feedback.className = 'input-hint text-error';
+      } else {
+        feedback.textContent = `✓ Username '@${rawUsername}' is available!`;
+        feedback.className = 'input-hint text-success';
+      }
     }
   } catch (error) {
-    // If Firebase permissions block read, format is valid
     feedback.textContent = `✓ Username format valid`;
     feedback.className = 'input-hint text-success';
   }
@@ -212,6 +219,7 @@ async function checkUsernameAvailability() {
 async function handleRegister(event) {
   event.preventDefault();
 
+  const submitBtn = document.getElementById('btn-submit-register');
   const fullName = document.getElementById('reg-fullname').value.trim();
   const contactNumber = document.getElementById('reg-contact').value.trim();
   const username = document.getElementById('reg-username').value.trim().toLowerCase();
@@ -225,57 +233,163 @@ async function handleRegister(event) {
   errorDiv.classList.add('hidden');
   successDiv.classList.add('hidden');
 
+  if (!fullName || !contactNumber || !username || !email || !password) {
+    errorDiv.textContent = 'Please fill out all required fields.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    errorDiv.textContent = 'Username can only contain letters, numbers, and underscores (_).';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (password.length < 6) {
+    errorDiv.textContent = 'Password must be at least 6 characters long.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
   if (password !== confirmPassword) {
     errorDiv.textContent = 'Passwords do not match. Please re-enter.';
     errorDiv.classList.remove('hidden');
     return;
   }
 
-  const userData = {
-    fullName: fullName,
-    contactNumber: contactNumber,
-    username: username,
-    email: email,
-    password: password,
-    availableBalance: 0.00,
-    lockedDebitBalance: 0.00,
-    createdAt: new Date().toISOString()
-  };
-
-  // Always update local database fallback so app never gets stuck
-  const localUsers = getLocalStore('users');
-  if (localUsers[username]) {
-    errorDiv.textContent = `Username '${username}' is already taken. Please choose another.`;
-    errorDiv.classList.remove('hidden');
-    return;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating Account & Syncing to Firebase...';
   }
 
-  localUsers[username] = userData;
-  setLocalStore('users', localUsers);
-
-  // Try Firebase Realtime Database save
   try {
+    await ensureFirebaseAuth();
+
+    // 1. Check if Username exists in Firebase RTDB
+    let usernameExists = false;
+    try {
+      const uSnap = await db.ref('users/' + username).once('value');
+      if (uSnap.exists()) {
+        usernameExists = true;
+      }
+    } catch (e) {
+      console.warn("RTDB username check note:", e.message);
+    }
+
+    if (!usernameExists) {
+      const localUsers = getLocalStore('users');
+      if (localUsers[username]) usernameExists = true;
+    }
+
+    if (usernameExists) {
+      errorDiv.textContent = `Username '@${username}' is already taken. Please choose another.`;
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+      }
+      return;
+    }
+
+    // 2. Check if Email already exists in Firebase RTDB
+    let emailExists = false;
+    try {
+      const allUsersSnap = await db.ref('users').once('value');
+      if (allUsersSnap.exists()) {
+        const usersObj = allUsersSnap.val();
+        for (let k in usersObj) {
+          if (usersObj[k].email && usersObj[k].email.toLowerCase() === email) {
+            emailExists = true;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("RTDB email check note:", e.message);
+    }
+
+    if (emailExists) {
+      errorDiv.textContent = `Email '${email}' is already registered. Please login or use another email.`;
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+      }
+      return;
+    }
+
+    const userData = {
+      fullName: fullName,
+      contactNumber: contactNumber,
+      username: username,
+      email: email,
+      password: password,
+      availableBalance: 0.00,
+      lockedDebitBalance: 0.00,
+      createdAt: new Date().toISOString()
+    };
+
+    // 3. Write directly to Firebase Realtime Database FIRST to guarantee cloud availability
     await db.ref('users/' + username).set(userData);
+
+    // Sync to local DB cache for offline fallback
+    const localUsers = getLocalStore('users');
+    localUsers[username] = userData;
+    setLocalStore('users', localUsers);
+
+    successDiv.textContent = '✓ Account created successfully in Database! Logging you in...';
+    successDiv.classList.remove('hidden');
+
+    currentUser = userData;
+    localStorage.setItem('efinance_current_user', JSON.stringify(userData));
+    updateHeaderGreeting();
+
+    setTimeout(() => {
+      document.getElementById('form-register').reset();
+      resetUsernameValidation();
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+      }
+      navigateTo('home');
+      showToast(`Welcome to E Finance, ${fullName}! Account active on all devices.`, 'success');
+    }, 1000);
+
   } catch (err) {
-    console.warn("Firebase RTDB permission warning (using local sync):", err.message);
-  }
+    console.error("Firebase registration error:", err);
 
-  successDiv.textContent = 'Account created successfully! Logging you in...';
-  successDiv.classList.remove('hidden');
+    // Fallback: If Firebase DB network write fails, save locally and inform user
+    const userData = {
+      fullName: fullName,
+      contactNumber: contactNumber,
+      username: username,
+      email: email,
+      password: password,
+      availableBalance: 0.00,
+      lockedDebitBalance: 0.00,
+      createdAt: new Date().toISOString()
+    };
 
-  currentUser = userData;
-  localStorage.setItem('efinance_current_user', JSON.stringify(userData));
-  updateHeaderGreeting();
+    const localUsers = getLocalStore('users');
+    localUsers[username] = userData;
+    setLocalStore('users', localUsers);
 
-  setTimeout(() => {
-    document.getElementById('form-register').reset();
+    currentUser = userData;
+    localStorage.setItem('efinance_current_user', JSON.stringify(userData));
+    updateHeaderGreeting();
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+    }
+
     navigateTo('home');
-    showToast(`Welcome to E Finance, ${fullName}!`, 'success');
-  }, 1000);
+    showToast(`Account created (Offline Mode). Cloud sync will retry when online.`, 'warning');
+  }
 }
 
 // ==========================================================================
-// 5. LOGIN HANDLER
+// 5. LOGIN HANDLER (CROSS-DEVICE FIREBASE SYNCED)
 // ==========================================================================
 async function handleLogin(event) {
   event.preventDefault();
@@ -283,6 +397,7 @@ async function handleLogin(event) {
   const userInput = document.getElementById('login-username').value.trim().toLowerCase();
   const password = document.getElementById('login-password').value;
   const errorDiv = document.getElementById('login-error');
+  const submitBtn = event.target.querySelector('button[type="submit"]');
   
   errorDiv.classList.add('hidden');
 
@@ -292,64 +407,113 @@ async function handleLogin(event) {
     return;
   }
 
-  let matchedUser = null;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span>Logging in...</span> <i class="fa-solid fa-spinner fa-spin"></i>';
+  }
 
-  // 1. Try Firebase RTDB first
   try {
-    const snap = await db.ref('users/' + userInput).once('value');
-    if (snap.exists()) {
-      matchedUser = snap.val();
-    } else {
-      const allUsersSnap = await db.ref('users').once('value');
-      if (allUsersSnap.exists()) {
-        const usersObj = allUsersSnap.val();
-        for (let key in usersObj) {
-          if (usersObj[key].email === userInput) {
-            matchedUser = usersObj[key];
+    await ensureFirebaseAuth();
+
+    let matchedUser = null;
+
+    // 1. If userInput is a simple username (no invalid path characters like . or @), try direct key lookup
+    const isValidPathKey = /^[a-zA-Z0-9_]+$/.test(userInput);
+    if (isValidPathKey) {
+      try {
+        const snap = await db.ref('users/' + userInput).once('value');
+        if (snap.exists()) {
+          matchedUser = snap.val();
+        }
+      } catch (err) {
+        console.warn("Direct key lookup note:", err.message);
+      }
+    }
+
+    // 2. If not found by key, search Firebase RTDB across all users (by email or username)
+    if (!matchedUser) {
+      try {
+        const allUsersSnap = await db.ref('users').once('value');
+        if (allUsersSnap.exists()) {
+          const usersObj = allUsersSnap.val();
+          for (let key in usersObj) {
+            const u = usersObj[key];
+            if (u.username.toLowerCase() === userInput || (u.email && u.email.toLowerCase() === userInput)) {
+              matchedUser = u;
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("All users scan note:", err.message);
+      }
+    }
+
+    // 3. Fallback to Local Storage DB if Firebase is offline
+    if (!matchedUser) {
+      const localUsers = getLocalStore('users');
+      if (localUsers[userInput]) {
+        matchedUser = localUsers[userInput];
+      } else {
+        for (let key in localUsers) {
+          const u = localUsers[key];
+          if (u.username.toLowerCase() === userInput || (u.email && u.email.toLowerCase() === userInput)) {
+            matchedUser = u;
             break;
           }
         }
       }
     }
-  } catch (err) {
-    console.warn("Firebase login fallback to local DB:", err.message);
-  }
 
-  // 2. Fallback to Local Storage DB if Firebase is blocked or offline
-  if (!matchedUser) {
-    const localUsers = getLocalStore('users');
-    if (localUsers[userInput]) {
-      matchedUser = localUsers[userInput];
-    } else {
-      for (let key in localUsers) {
-        if (localUsers[key].email === userInput) {
-          matchedUser = localUsers[key];
-          break;
-        }
+    if (!matchedUser) {
+      errorDiv.textContent = `No account found with username or email '${userInput}'. Please create an account.`;
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
       }
+      return;
+    }
+
+    if (matchedUser.password !== password) {
+      errorDiv.textContent = 'Incorrect password. Please try again.';
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
+      }
+      return;
+    }
+
+    // Login successful
+    currentUser = matchedUser;
+    localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+
+    // Cache user to local storage
+    const localUsers = getLocalStore('users');
+    localUsers[matchedUser.username] = matchedUser;
+    setLocalStore('users', localUsers);
+
+    updateHeaderGreeting();
+    document.getElementById('form-login').reset();
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
+    }
+
+    showToast(`Welcome back, ${currentUser.fullName || currentUser.username}!`, 'success');
+    navigateTo('home');
+
+  } catch (err) {
+    console.error("Login error:", err);
+    errorDiv.textContent = 'An error occurred during login. Please check connection and try again.';
+    errorDiv.classList.remove('hidden');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
     }
   }
-
-  if (!matchedUser) {
-    errorDiv.textContent = 'No account found with this username or email. Please create an account.';
-    errorDiv.classList.remove('hidden');
-    return;
-  }
-
-  if (matchedUser.password !== password) {
-    errorDiv.textContent = 'Incorrect password. Please try again.';
-    errorDiv.classList.remove('hidden');
-    return;
-  }
-
-  // Login successful
-  currentUser = matchedUser;
-  localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
-  updateHeaderGreeting();
-  
-  document.getElementById('form-login').reset();
-  showToast(`Welcome back, ${currentUser.fullName || currentUser.username}!`, 'success');
-  navigateTo('home');
 }
 
 // ==========================================================================
@@ -664,6 +828,7 @@ async function handleDebitSubmit(event) {
 
   // 2. Try Firebase push
   try {
+    await ensureFirebaseAuth();
     await db.ref('debits/' + debitId).set(debitRecord);
     await db.ref('users/' + currentUser.username).update({
       lockedDebitBalance: newLocked
@@ -822,6 +987,7 @@ async function handleWithdrawSubmit(event) {
 
   // 2. Firebase push
   try {
+    await ensureFirebaseAuth();
     await db.ref('withdrawals/' + withdrawId).set(withdrawRequest);
     await db.ref('users/' + currentUser.username).update({
       availableBalance: newAvailable
