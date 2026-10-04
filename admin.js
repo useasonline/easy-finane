@@ -250,6 +250,8 @@ function loadAdminData() {
     let totalUsers = 0;
     let totalSystemDebits = 0;
 
+    const localDebits = getLocalStore('debits');
+
     for (let uKey in usersObj) {
       totalUsers++;
       const u = usersObj[uKey];
@@ -257,22 +259,44 @@ function loadAdminData() {
       const available = parseFloat(u.availableBalance || 0);
       totalSystemDebits += locked;
 
-      const monthlyBonus = locked > 0 ? parseFloat((locked * 0.2).toFixed(2)) : 2.00;
-      const creditedCount = u.creditedMonthCount || 0;
-      const nextMonth = creditedCount + 1;
+      // Find all approved funds for this user
+      const userApprovedDebits = [];
+      for (let dK in localDebits) {
+        if (localDebits[dK].username === u.username && localDebits[dK].status === 'Approved') {
+          userApprovedDebits.push({ id: dK, ...localDebits[dK] });
+        }
+      }
+      userApprovedDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      userApprovedDebits.forEach((d, idx) => { if (!d.fundNumber) d.fundNumber = idx + 1; });
 
       let creditActionHtml = '';
-      if (locked === 0) {
-        creditActionHtml = `<span class="text-muted" style="font-size: 0.82rem;">No Active Deposit Scheme</span>`;
-      } else if (creditedCount < 12) {
-        creditActionHtml = `
-          <button class="btn-emerald" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;" onclick="adminCreditNextMonthBonus('${u.username}')">
-            <i class="fa-solid fa-gift"></i> Credit Month ${nextMonth} (+$${monthlyBonus})
-          </button>
-          <small class="text-muted" style="display: block; margin-top: 0.2rem;">${creditedCount}/12 Months Credited</small>
-        `;
+      if (userApprovedDebits.length === 0) {
+        creditActionHtml = `<span class="text-muted" style="font-size: 0.82rem;">No Approved Funds Yet</span>`;
       } else {
-        creditActionHtml = `<span class="badge-status success"><i class="fa-solid fa-circle-check"></i> All 12 Months Credited</span>`;
+        userApprovedDebits.forEach(fund => {
+          const fLabel = `Fund ${fund.fundNumber}`;
+          const fAmount = parseFloat(fund.amount || 10);
+          const fBonus = fund.monthlyBonus || parseFloat((fAmount * 0.2).toFixed(2));
+          const fCount = parseInt(fund.creditedMonthCount || 0);
+          const fNextMonth = fCount + 1;
+
+          if (fCount < 12) {
+            creditActionHtml += `
+              <div style="margin-bottom: 0.45rem;">
+                <span class="fund-badge-pill" style="font-size: 0.75rem; margin-right: 0.35rem;"><i class="fa-solid fa-vault"></i> ${fLabel} ($${fAmount} USD)</span>
+                <button class="btn-emerald" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="adminCreditSpecificFundMonth('${fund.id}')">
+                  <i class="fa-solid fa-gift"></i> Credit Month ${fNextMonth} (+$${fBonus})
+                </button>
+                <small class="text-muted" style="margin-left: 0.3rem;">(${fCount}/12 Credited)</small>
+              </div>`;
+          } else {
+            creditActionHtml += `
+              <div style="margin-bottom: 0.45rem;">
+                <span class="fund-badge-pill" style="font-size: 0.75rem; margin-right: 0.35rem;">${fLabel} ($${fAmount} USD)</span>
+                <span class="badge-status success" style="font-size: 0.72rem;"><i class="fa-solid fa-circle-check"></i> All 12 Months Credited</span>
+              </div>`;
+          }
+        });
       }
 
       const tr = document.createElement('tr');
@@ -438,6 +462,58 @@ async function adminRejectWithdrawal(reqId) {
   }
 
   showToast(`Withdrawal #${reqId} rejected & balance refunded.`, 'info');
+  loadAdminData();
+}
+
+async function adminCreditSpecificFundMonth(debitId) {
+  const localDebits = getLocalStore('debits');
+  const localUsers = getLocalStore('users');
+
+  const debit = localDebits[debitId];
+  if (!debit) return;
+
+  const username = debit.username;
+  const fundLabel = debit.fundNumber ? `Fund ${debit.fundNumber}` : 'Fund';
+  const fAmount = parseFloat(debit.amount || 10);
+  const bonusAmount = debit.monthlyBonus || parseFloat((fAmount * 0.2).toFixed(2));
+  const currCount = parseInt(debit.creditedMonthCount || 0);
+  const nextMonth = currCount + 1;
+
+  if (nextMonth > 12) {
+    showToast(`All 12 months have already been credited for ${fundLabel} (@${username}).`, 'info');
+    return;
+  }
+
+  // 1. Update debit creditedMonthCount in LocalStorage
+  debit.creditedMonthCount = nextMonth;
+  setLocalStore('debits', localDebits);
+
+  // 2. Update user available balance in LocalStorage
+  if (localUsers[username]) {
+    const currAvail = parseFloat(localUsers[username].availableBalance || 0);
+    localUsers[username].availableBalance = currAvail + bonusAmount;
+    setLocalStore('users', localUsers);
+  }
+
+  // 3. Update Firebase Realtime Database
+  try {
+    await db.ref(`debits/${debitId}`).update({
+      creditedMonthCount: nextMonth
+    });
+
+    const userSnap = await db.ref(`users/${username}`).once('value');
+    if (userSnap.exists()) {
+      const uData = userSnap.val();
+      const currBal = parseFloat(uData.availableBalance || 0);
+      await db.ref(`users/${username}`).update({
+        availableBalance: currBal + bonusAmount
+      });
+    }
+  } catch (err) {
+    console.warn("Firebase RTDB credit fund sync note:", err.message);
+  }
+
+  showToast(`✓ Credited Month ${nextMonth} payout (+$${bonusAmount} USD) for ${fundLabel} to @${username}!`, 'success');
   loadAdminData();
 }
 

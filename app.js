@@ -640,6 +640,14 @@ function loadUserDashboard() {
       }
     }
 
+    // Sort ascending by timestamp so Fund 1 is oldest, Fund 2 is second, etc.
+    userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+    // Assign Fund Numbers
+    userDebits.forEach((d, idx) => {
+      if (!d.fundNumber) d.fundNumber = idx + 1;
+    });
+
     if (userDebits.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
@@ -662,10 +670,14 @@ function loadUserDashboard() {
 
         const inrDisp = debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : (debit.amount * 100);
         const usdDisp = parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const fundLabel = `Fund ${debit.fundNumber}`;
 
         card.innerHTML = `
           <div class="debit-card-header">
-            <span class="debit-amount-tag">₹${inrDisp} ($${usdDisp} USD)</span>
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span class="fund-badge-pill"><i class="fa-solid fa-vault"></i> ${fundLabel}</span>
+              <span class="debit-amount-tag">₹${inrDisp} ($${usdDisp} USD)</span>
+            </div>
             <span class="debit-date-tag"><i class="fa-solid fa-calendar"></i> ${debit.date}</span>
           </div>
           <div class="debit-card-body" style="margin: 0.5rem 0;">
@@ -674,7 +686,7 @@ function loadUserDashboard() {
           </div>
           <div class="debit-card-details">
             <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>$${debit.monthlyBonus || 2}/mo</strong> for 12 months</div>
-            <div><i class="fa-solid fa-shield-halved text-gold"></i> Savings Scheme</div>
+            <div class="click-schedule-hint"><i class="fa-solid fa-calendar-days text-blue"></i> Click for ${fundLabel} 12-Month Schedule <i class="fa-solid fa-chevron-right"></i></div>
           </div>`;
         container.appendChild(card);
       });
@@ -1017,15 +1029,21 @@ async function handleDebitSubmit(event) {
     const monthlyBonusUSD = parseFloat((usdAmount * 0.2).toFixed(2));
     const debitId = 'DEB-' + Date.now();
 
+    const localDebits = getLocalStore('debits');
+    const userExistingDebits = Object.values(localDebits).filter(d => d.username === currentUser.username);
+    const fundNumber = userExistingDebits.length + 1;
+
     const debitRecord = {
       id: debitId,
       username: currentUser.username,
       fullName: currentUser.fullName || currentUser.username,
+      fundNumber: fundNumber,
       amount: usdAmount, // USD ($)
       inrAmount: inrAmount, // INR (₹)
       date: debitDate || new Date().toLocaleDateString('en-US'),
       monthlyBonus: monthlyBonusUSD,
       monthsTotal: 12,
+      creditedMonthCount: 0,
       utr: utr,
       proofUrl: proofUrl,
       status: 'Pending', // PENDING ADMIN APPROVAL
@@ -1033,7 +1051,6 @@ async function handleDebitSubmit(event) {
     };
 
     // 4. Save debit record to Local Storage DB
-    const localDebits = getLocalStore('debits');
     localDebits[debitId] = debitRecord;
     setLocalStore('debits', localDebits);
 
@@ -1097,12 +1114,21 @@ function openSchemeDetailsForDebit(debit) {
   const amount = debit.amount || 10;
   const date = debit.date || new Date().toLocaleDateString('en-US');
   const monthlyBonus = debit.monthlyBonus || parseFloat((amount * 0.2).toFixed(2));
+  const fundLabel = debit.fundNumber ? `Fund ${debit.fundNumber}` : 'Fund 1';
   
-  // Calculate credited months count dynamically
-  const creditedCount = debit.creditedMonths ? debit.creditedMonths.length : (currentUser?.creditedMonthCount || 0);
+  // Calculate credited months count dynamically for THIS specific fund
+  const creditedCount = parseInt(debit.creditedMonthCount || (debit.creditedMonths ? debit.creditedMonths.length : 0));
 
   summaryBox.innerHTML = `
-    <i class="fa-solid fa-circle-check text-green"></i> Present on date <strong>${date}</strong> you debited <strong>$${parseFloat(amount).toLocaleString('en-US')}</strong>. Per month you get <strong>$${monthlyBonus}</strong> for 12 months.
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+      <div>
+        <span class="fund-badge-pill" style="font-size: 0.85rem; padding: 0.25rem 0.75rem; margin-bottom: 0.35rem;"><i class="fa-solid fa-vault"></i> ${fundLabel} Earnings Breakdown</span>
+        <p style="font-size: 0.92rem; color: #1e293b; margin-top: 0.25rem;">Present on date <strong>${date}</strong> you debited <strong>₹${debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : amount * 100} ($${parseFloat(amount).toLocaleString('en-US')} USD)</strong>. Per month you get <strong>$${monthlyBonus} USD</strong> for 12 months.</p>
+      </div>
+      <div class="payout-progress-pill">
+        <strong>${creditedCount} / 12</strong> Months Credited
+      </div>
+    </div>
   `;
 
   gridContainer.innerHTML = '';
