@@ -185,6 +185,16 @@
     <section id="page-home" class="page-view">
       <div class="dashboard-container">
         
+        <!-- LIVE USD TO INR EXCHANGE RATE BANNER -->
+        <div class="usd-rate-banner">
+          <div class="usd-rate-content">
+            <span class="flag-icon"><i class="fa-solid fa-chart-line text-green"></i></span>
+            <span>Live Market Exchange Rate: <strong>1 USD = ₹<span id="live-usd-inr-val">83.85</span> INR</strong></span>
+            <span class="badge-live-pulse"><i class="fa-solid fa-circle"></i> LIVE</span>
+          </div>
+          <small class="rate-conversion-note"><i class="fa-solid fa-calculator text-gold"></i> Scheme Deposit Conversion Rate: <strong>₹100 INR = $1.00 USD</strong> (e.g. ₹1,000 = $10 USD)</small>
+        </div>
+
         <!-- WELCOME BANNER -->
         <div class="welcome-card">
           <div class="welcome-text">
@@ -211,7 +221,7 @@
               <span id="val-available-balance" class="amount-num">0.00</span>
             </div>
             <div class="card-info">
-              <i class="fa-solid fa-circle-info"></i> Includes your monthly bonus credited by Admin (e.g. $2/month).
+              <i class="fa-solid fa-circle-info"></i> Includes your monthly bonus credited by Admin (e.g. $2.00 USD/month).
             </div>
           </div>
 
@@ -226,7 +236,7 @@
               <span id="val-debited-balance" class="amount-num">0.00</span>
             </div>
             <div class="card-info clickable-info">
-              <span><i class="fa-solid fa-arrow-trend-up"></i> Click to view monthly $2 profit return schedule</span>
+              <span><i class="fa-solid fa-arrow-trend-up"></i> Click to view monthly $2.00 USD profit return schedule</span>
               <i class="fa-solid fa-chevron-right"></i>
             </div>
           </div>
@@ -242,7 +252,7 @@
               <span id="val-total-account-value" class="amount-num">0.00</span>
             </div>
             <div class="card-info">
-              <span>Principal ($<span id="info-principal-amount">0.00</span>) + Available Bonus ($<span id="info-bonus-amount">0.00</span>)</span>
+              <span>Principal ($<span id="info-principal-amount">0.00</span> USD) + Available Bonus ($<span id="info-bonus-amount">0.00</span> USD)</span>
             </div>
           </div>
 
@@ -256,7 +266,7 @@
             </div>
             <div class="btn-text-box">
               <span class="btn-title">Debit Money</span>
-              <span class="btn-subtitle">Deposit amount & generate payment QR</span>
+              <span class="btn-subtitle">Deposit in Rupees (₹100 = $1 USD) & generate QR</span>
             </div>
             <i class="fa-solid fa-chevron-right arrow-icon"></i>
           </button>
@@ -284,16 +294,16 @@
             <div class="step-card">
               <div class="step-number">1</div>
               <div class="step-icon"><i class="fa-solid fa-wallet"></i></div>
-              <h4>Debit / Deposit Money</h4>
-              <p>Deposit any amount starting from <strong>$1</strong> via instant QR code scanner.</p>
+              <h4>Debit / Deposit Rupees</h4>
+              <p>Deposit any amount from <strong>₹100 to ₹25,000</strong> via instant UPI QR scanner. Every ₹100 converts to <strong>$1.00 USD</strong> in your account.</p>
               <div class="step-tag">Step 1</div>
             </div>
 
             <div class="step-card highlight">
               <div class="step-number">2</div>
               <div class="step-icon"><i class="fa-solid fa-chart-line text-green"></i></div>
-              <h4>Earn 20% Monthly Profit</h4>
-              <p>Receive <strong>$2/month</strong> profit bonus credited directly into your Withdrawable Balance for every $10 scheme (12 months).</p>
+              <h4>Earn $2 USD / Mo Bonus</h4>
+              <p>For every $10 USD (₹1,000) scheme deposit, receive <strong>$2.00 USD/month</strong> profit bonus credited for 12 months.</p>
               <div class="step-tag green">20% Monthly Return</div>
             </div>
 
@@ -313,32 +323,37 @@
             <div class="calc-header">
               <div>
                 <h3><i class="fa-solid fa-calculator text-gold"></i> Interactive Scheme Profit & Return Calculator</h3>
-                <p>Calculate your guaranteed monthly payout & total 12-month earnings before depositing!</p>
+                <p>Calculate your guaranteed monthly USD payout & 12-month earnings before depositing in Rupees!</p>
               </div>
               <div class="calc-badge"><i class="fa-solid fa-arrow-trend-up"></i> 240% Total ROI</div>
             </div>
 
             <div class="calc-grid">
               <div class="calc-inputs">
-                <label for="calc-amount-range">Deposit Amount: <strong id="calc-amount-label" class="text-gold">$10</strong></label>
-                <input type="range" id="calc-amount-range" min="5" max="500" step="5" value="10" oninput="updateProfitCalculator()">
+                <label for="calc-amount-range">Deposit Amount (INR): <strong id="calc-amount-label" class="text-gold">₹1,000</strong></label>
+                <input type="range" id="calc-amount-range" min="100" max="25000" step="100" value="1000" oninput="updateProfitCalculator()">
                 
                 <div class="calc-presets">
-                  <button type="button" class="btn-preset-sm active" onclick="setCalcPreset(10)">$10</button>
-                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(25)">$25</button>
-                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(50)">$50</button>
-                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(100)">$100</button>
+                  <button type="button" class="btn-preset-sm active" onclick="setCalcPreset(1000)">₹1,000</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(2500)">₹2,500</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(5000)">₹5,000</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(10000)">₹10,000</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(25000)">₹25,000</button>
                 </div>
               </div>
 
               <div class="calc-results-box">
                 <div class="res-item">
+                  <span class="res-label">Converted Account Principal</span>
+                  <span class="res-value text-gold">$<span id="calc-res-usd">10.00</span> USD</span>
+                </div>
+                <div class="res-item">
                   <span class="res-label">Monthly Payout Credit</span>
-                  <span class="res-value text-green">$<span id="calc-res-monthly">2</span> / mo</span>
+                  <span class="res-value text-green">$<span id="calc-res-monthly">2.00</span> USD / mo</span>
                 </div>
                 <div class="res-item">
                   <span class="res-label">12-Month Total Profit Return</span>
-                  <span class="res-value text-gold">$<span id="calc-res-total">24</span></span>
+                  <span class="res-value text-gold">$<span id="calc-res-total">24.00</span> USD</span>
                 </div>
                 <div class="res-item">
                   <span class="res-label">Scheme Duration</span>
@@ -346,7 +361,7 @@
                 </div>
                 
                 <button class="btn-primary full-width calc-cta-btn" onclick="startSchemeWithCalcAmount()">
-                  <i class="fa-solid fa-bolt"></i> Start Scheme With $<span id="calc-btn-amount">10</span>
+                  <i class="fa-solid fa-bolt"></i> Start Scheme With ₹<span id="calc-btn-amount">1,000</span> ($<span id="calc-btn-usd">10.00</span> USD)
                 </button>
               </div>
             </div>
@@ -364,7 +379,7 @@
             <!-- Dynamic debits cards inserted here -->
             <div class="empty-state">
               <i class="fa-solid fa-receipt empty-icon"></i>
-              <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your $10 monthly scheme!</p>
+              <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your ₹1,000 ($10 USD) monthly scheme!</p>
             </div>
           </div>
         </div>
@@ -442,17 +457,20 @@
         <form id="form-debit" onsubmit="handleDebitSubmit(event)">
           
           <div class="form-group">
-            <label for="debit-amount">Enter Debit Amount ($)</label>
+            <label for="debit-amount">Enter Debit Amount in Rupees (₹)</label>
             <div class="amount-input-wrapper">
-              <span class="currency-symbol">$</span>
-              <input type="number" id="debit-amount" value="10" min="1" step="1" required oninput="generatePaymentQR()">
+              <span class="currency-symbol">₹</span>
+              <input type="number" id="debit-amount" value="1000" min="100" max="25000" step="100" required oninput="generatePaymentQR()">
             </div>
+            <small class="input-hint">Deposit range: <strong>₹100 to ₹25,000</strong> (Conversion rate: ₹100 = $1.00 USD)</small>
             
-            <div class="preset-buttons">
-              <button type="button" class="btn-preset" onclick="setDebitAmount(5)">$5</button>
-              <button type="button" class="btn-preset active" onclick="setDebitAmount(10)">$10</button>
-              <button type="button" class="btn-preset" onclick="setDebitAmount(20)">$20</button>
-              <button type="button" class="btn-preset" onclick="setDebitAmount(50)">$50</button>
+            <div class="preset-buttons" style="margin-top: 0.75rem;">
+              <button type="button" class="btn-preset" onclick="setDebitAmount(500)">₹500</button>
+              <button type="button" class="btn-preset active" onclick="setDebitAmount(1000)">₹1,000</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(2500)">₹2,500</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(5000)">₹5,000</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(10000)">₹10,000</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(25000)">₹25,000</button>
             </div>
           </div>
 
@@ -468,26 +486,26 @@
               <i class="fa-solid fa-bullseye"></i> <strong>12-Month Profit Return Scheme</strong>
             </div>
             <div class="scheme-details">
-              <p>For your <strong>$<span id="preview-debit-amount">10</span></strong> debit deposit:</p>
+              <p>For your deposit of <strong>₹<span id="preview-debit-inr">1,000</span> INR</strong> (Converts to <strong>$<span id="preview-debit-amount">10.00</span> USD</strong> account balance):</p>
               <ul>
-                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Monthly Bonus Credit:</strong> $<span id="preview-monthly-bonus">2</span> / month</li>
+                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Monthly Bonus Credit:</strong> $<span id="preview-monthly-bonus">2.00</span> USD / month</li>
                 <li><i class="fa-solid fa-check-double text-green"></i> <strong>Duration:</strong> 12 Months</li>
-                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Total Bonus Returns:</strong> $<span id="preview-total-bonus">24</span></li>
+                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Total Bonus Returns:</strong> $<span id="preview-total-bonus">24.00</span> USD</li>
               </ul>
             </div>
           </div>
 
           <!-- DYNAMIC QR SCANNER SECTION -->
           <div class="qr-section">
-            <h4><i class="fa-solid fa-qrcode"></i> Scan & Pay via Payment QR</h4>
-            <p>Scan this QR code using Google Pay, PhonePe, Paytm, or any payment app to pay $<span id="qr-amount-display">10</span></p>
+            <h4><i class="fa-solid fa-qrcode"></i> Scan & Pay via UPI QR</h4>
+            <p>Scan this QR code using Google Pay, PhonePe, Paytm, or any UPI app to pay <strong>₹<span id="qr-amount-display">1,000</span> INR</strong></p>
 
             <div class="qr-container-wrapper">
               <div id="qrcode" class="qr-box"></div>
             </div>
 
             <div class="upi-id-box">
-              <span>Payment ID: <strong>easyfinance@upi</strong></span>
+              <span>UPI ID: <strong>easyfinance@upi</strong></span>
               <button type="button" class="btn-copy" onclick="copyUPI()"><i class="fa-solid fa-copy"></i> Copy</button>
             </div>
           </div>

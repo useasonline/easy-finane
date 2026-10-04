@@ -57,9 +57,27 @@ async function ensureFirebaseAuth() {
 // ==========================================================================
 // 2. DOM INITIALIZATION & EVENT LISTENERS
 // ==========================================================================
+// Fetch live USD to INR exchange rate from public rate API
+async function fetchLiveUsdRate() {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await res.json();
+    if (data && data.rates && data.rates.INR) {
+      const inrRate = parseFloat(data.rates.INR).toFixed(2);
+      const rateEl = document.getElementById('live-usd-inr-val');
+      if (rateEl) rateEl.textContent = inrRate;
+    }
+  } catch (e) {
+    console.log("Live USD Rate note:", e.message);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Initialize Firebase Auth connection asynchronously
   ensureFirebaseAuth();
+  
+  // Fetch live market USD to INR exchange rate
+  fetchLiveUsdRate();
 
   // Set default date
   const debitDateInput = document.getElementById('debit-date');
@@ -700,26 +718,40 @@ function updateProfitCalculator() {
   const rangeInput = document.getElementById('calc-amount-range');
   if (!rangeInput) return;
 
-  const amount = parseFloat(rangeInput.value) || 10;
-  const monthlyProfit = parseFloat((amount * 0.2).toFixed(2));
+  const inrAmount = parseFloat(rangeInput.value) || 1000;
+  const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+  const monthlyProfit = parseFloat((usdAmount * 0.2).toFixed(2));
   const totalProfit = parseFloat((monthlyProfit * 12).toFixed(2));
 
-  document.getElementById('calc-amount-label').textContent = '$' + amount.toLocaleString('en-US');
-  document.getElementById('calc-res-monthly').textContent = monthlyProfit.toLocaleString('en-US');
-  document.getElementById('calc-res-total').textContent = totalProfit.toLocaleString('en-US');
-  document.getElementById('calc-btn-amount').textContent = amount.toLocaleString('en-US');
+  const amountLabel = document.getElementById('calc-amount-label');
+  if (amountLabel) amountLabel.textContent = '₹' + inrAmount.toLocaleString('en-IN');
+
+  const resUsd = document.getElementById('calc-res-usd');
+  if (resUsd) resUsd.textContent = usdAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const resMonthly = document.getElementById('calc-res-monthly');
+  if (resMonthly) resMonthly.textContent = monthlyProfit.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const resTotal = document.getElementById('calc-res-total');
+  if (resTotal) resTotal.textContent = totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const btnAmount = document.getElementById('calc-btn-amount');
+  if (btnAmount) btnAmount.textContent = inrAmount.toLocaleString('en-IN');
+
+  const btnUsd = document.getElementById('calc-btn-usd');
+  if (btnUsd) btnUsd.textContent = usdAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
 }
 
-function setCalcPreset(amount) {
+function setCalcPreset(inrAmount) {
   const rangeInput = document.getElementById('calc-amount-range');
   if (rangeInput) {
-    rangeInput.value = amount;
+    rangeInput.value = inrAmount;
     updateProfitCalculator();
   }
 
   document.querySelectorAll('.btn-preset-sm').forEach(btn => {
     btn.classList.remove('active');
-    if (btn.textContent.includes('$' + amount.toLocaleString('en-US')) || btn.textContent.includes(amount.toString())) {
+    if (btn.textContent.includes('₹' + inrAmount.toLocaleString('en-IN')) || btn.textContent.includes(inrAmount.toString())) {
       btn.classList.add('active');
     }
   });
@@ -727,10 +759,10 @@ function setCalcPreset(amount) {
 
 function startSchemeWithCalcAmount() {
   const rangeInput = document.getElementById('calc-amount-range');
-  const amount = parseFloat(rangeInput?.value || 10);
+  const inrAmount = parseFloat(rangeInput?.value || 1000);
 
   openDebitModal();
-  setDebitAmount(amount);
+  setDebitAmount(inrAmount);
 }
 
 // ==========================================================================
@@ -741,12 +773,13 @@ function openDebitModal() {
   generatePaymentQR();
 }
 
-function setDebitAmount(amount) {
-  document.getElementById('debit-amount').value = amount;
+function setDebitAmount(inrAmount) {
+  const debitInput = document.getElementById('debit-amount');
+  if (debitInput) debitInput.value = inrAmount;
   
   document.querySelectorAll('.btn-preset').forEach(btn => {
     btn.classList.remove('active');
-    if (btn.textContent.includes('$' + amount.toLocaleString('en-US')) || btn.textContent.includes(amount.toString())) {
+    if (btn.textContent.includes('₹' + inrAmount.toLocaleString('en-IN')) || btn.textContent.includes(inrAmount.toString())) {
       btn.classList.add('active');
     }
   });
@@ -756,30 +789,45 @@ function setDebitAmount(amount) {
 
 function generatePaymentQR() {
   const amountInput = document.getElementById('debit-amount');
-  let amount = parseFloat(amountInput.value) || 10;
+  let inrAmount = parseFloat(amountInput?.value) || 1000;
   
-  const monthlyBonus = parseFloat((amount * 0.2).toFixed(2));
+  if (inrAmount > 25000) inrAmount = 25000;
+
+  const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+  const monthlyBonus = parseFloat((usdAmount * 0.2).toFixed(2));
   const totalBonus = parseFloat((monthlyBonus * 12).toFixed(2));
 
-  document.getElementById('preview-debit-amount').textContent = amount.toLocaleString('en-US');
-  document.getElementById('preview-monthly-bonus').textContent = monthlyBonus.toLocaleString('en-US');
-  document.getElementById('preview-total-bonus').textContent = totalBonus.toLocaleString('en-US');
-  document.getElementById('qr-amount-display').textContent = amount.toLocaleString('en-US');
+  const previewInr = document.getElementById('preview-debit-inr');
+  if (previewInr) previewInr.textContent = inrAmount.toLocaleString('en-IN');
+
+  const previewUsd = document.getElementById('preview-debit-amount');
+  if (previewUsd) previewUsd.textContent = usdAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const previewMonthly = document.getElementById('preview-monthly-bonus');
+  if (previewMonthly) previewMonthly.textContent = monthlyBonus.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const previewTotal = document.getElementById('preview-total-bonus');
+  if (previewTotal) previewTotal.textContent = totalBonus.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const qrAmountDisp = document.getElementById('qr-amount-display');
+  if (qrAmountDisp) qrAmountDisp.textContent = inrAmount.toLocaleString('en-IN');
 
   const qrcodeContainer = document.getElementById('qrcode');
-  qrcodeContainer.innerHTML = '';
+  if (qrcodeContainer) {
+    qrcodeContainer.innerHTML = '';
 
-  const upiString = `upi://pay?pa=easyfinance@upi&pn=EasyFinance&am=${amount}&cu=USD`;
+    const upiString = `upi://pay?pa=easyfinance@upi&pn=EasyFinance&am=${inrAmount}&cu=INR`;
 
-  if (window.QRCode) {
-    new QRCode(qrcodeContainer, {
-      text: upiString,
-      width: 180,
-      height: 180,
-      colorDark : "#050811",
-      colorLight : "#ffffff",
-      correctLevel : QRCode.CorrectLevel.H
-    });
+    if (window.QRCode) {
+      new QRCode(qrcodeContainer, {
+        text: upiString,
+        width: 180,
+        height: 180,
+        colorDark : "#050811",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.H
+      });
+    }
   }
 }
 
@@ -792,29 +840,31 @@ function copyUPI() {
 async function handleDebitSubmit(event) {
   event.preventDefault();
 
-  const amount = parseFloat(document.getElementById('debit-amount').value);
+  const inrAmount = parseFloat(document.getElementById('debit-amount').value);
   const debitDate = document.getElementById('debit-date').value;
   const utr = document.getElementById('debit-utr').value.trim();
   const errorDiv = document.getElementById('debit-error');
 
   errorDiv.classList.add('hidden');
 
-  if (!amount || amount < 1) {
-    errorDiv.textContent = 'Please enter a valid debit amount (Minimum $1).';
+  if (!inrAmount || inrAmount < 100 || inrAmount > 25000) {
+    errorDiv.textContent = 'Please enter a valid debit amount between ₹100 and ₹25,000.';
     errorDiv.classList.remove('hidden');
     return;
   }
 
-  const monthlyBonus = parseFloat((amount * 0.2).toFixed(2));
+  const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+  const monthlyBonusUSD = parseFloat((usdAmount * 0.2).toFixed(2));
   const debitId = 'deb_' + Date.now();
 
   const debitRecord = {
     id: debitId,
     username: currentUser.username,
     fullName: currentUser.fullName || currentUser.username,
-    amount: amount,
+    amount: usdAmount, // Account balance stored in USD ($)
+    inrAmount: inrAmount, // Reference deposit amount in INR (₹)
     date: debitDate || new Date().toLocaleDateString('en-US'),
-    monthlyBonus: monthlyBonus,
+    monthlyBonus: monthlyBonusUSD,
     monthsTotal: 12,
     utr: utr || 'DIRECT_' + Date.now(),
     timestamp: Date.now()
@@ -827,7 +877,7 @@ async function handleDebitSubmit(event) {
 
   const localUsers = getLocalStore('users');
   const currentLocked = parseFloat(currentUser.lockedDebitBalance || 0);
-  const newLocked = currentLocked + amount;
+  const newLocked = currentLocked + usdAmount;
   if (localUsers[currentUser.username]) {
     localUsers[currentUser.username].lockedDebitBalance = newLocked;
     setLocalStore('users', localUsers);
@@ -848,7 +898,7 @@ async function handleDebitSubmit(event) {
   }
 
   closeModal('modal-debit');
-  showToast(`Debited $${amount.toLocaleString('en-US')} successfully! Locked into scheme.`, 'success');
+  showToast(`Debited ₹${inrAmount.toLocaleString('en-IN')} ($${usdAmount.toFixed(2)} USD) successfully! Locked into scheme.`, 'success');
   loadUserDashboard();
 }
 
