@@ -257,21 +257,32 @@ function loadAdminData() {
       const available = parseFloat(u.availableBalance || 0);
       totalSystemDebits += locked;
 
+      const monthlyBonus = locked > 0 ? parseFloat((locked * 0.2).toFixed(2)) : 2.00;
+      const creditedCount = u.creditedMonthCount || 0;
+      const nextMonth = creditedCount + 1;
+
+      let creditActionHtml = '';
+      if (locked === 0) {
+        creditActionHtml = `<span class="text-muted" style="font-size: 0.82rem;">No Active Deposit Scheme</span>`;
+      } else if (creditedCount < 12) {
+        creditActionHtml = `
+          <button class="btn-emerald" style="padding: 0.35rem 0.75rem; font-size: 0.82rem;" onclick="adminCreditNextMonthBonus('${u.username}')">
+            <i class="fa-solid fa-gift"></i> Credit Month ${nextMonth} (+$${monthlyBonus})
+          </button>
+          <small class="text-muted" style="display: block; margin-top: 0.2rem;">${creditedCount}/12 Months Credited</small>
+        `;
+      } else {
+        creditActionHtml = `<span class="badge-status success"><i class="fa-solid fa-circle-check"></i> All 12 Months Credited</span>`;
+      }
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td><strong>@${u.username}</strong></td>
         <td>${u.fullName || 'N/A'}</td>
         <td>${u.contactNumber || 'N/A'}</td>
-        <td>$${locked.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+        <td><strong class="text-blue">$${locked.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
         <td><strong class="text-green">$${available.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
-        <td>
-          <button class="btn-secondary-sm" onclick="adminCreditBonus('${u.username}', 2)">
-            <i class="fa-solid fa-plus-circle text-green"></i> +$2 Bonus
-          </button>
-          <button class="btn-secondary-sm" onclick="adminCreditCustomBonus('${u.username}')">
-            Custom
-          </button>
-        </td>
+        <td>${creditActionHtml}</td>
       `;
       tbody.appendChild(tr);
     }
@@ -427,6 +438,78 @@ async function adminRejectWithdrawal(reqId) {
   }
 
   showToast(`Withdrawal #${reqId} rejected & balance refunded.`, 'info');
+  loadAdminData();
+}
+
+async function adminCreditNextMonthBonus(username) {
+  const localUsers = getLocalStore('users');
+  const localDebits = getLocalStore('debits');
+
+  let locked = 0;
+  let currCount = 0;
+  if (localUsers[username]) {
+    locked = parseFloat(localUsers[username].lockedDebitBalance || 0);
+    currCount = parseInt(localUsers[username].creditedMonthCount || 0);
+  }
+
+  const bonusAmount = locked > 0 ? parseFloat((locked * 0.2).toFixed(2)) : 2.00;
+  const nextMonth = currCount + 1;
+
+  if (nextMonth > 12) {
+    showToast(`All 12 months have already been credited for @${username}.`, 'info');
+    return;
+  }
+
+  // 1. Update LocalStorage user balance & credited count
+  if (localUsers[username]) {
+    const currAvail = parseFloat(localUsers[username].availableBalance || 0);
+    localUsers[username].availableBalance = currAvail + bonusAmount;
+    localUsers[username].creditedMonthCount = nextMonth;
+    setLocalStore('users', localUsers);
+  }
+
+  // 2. Update LocalStorage active debits for user
+  for (let dKey in localDebits) {
+    if (localDebits[dKey].username === username && localDebits[dKey].status === 'Approved') {
+      const monthsArr = localDebits[dKey].creditedMonths || [];
+      if (!monthsArr.includes(nextMonth)) {
+        monthsArr.push(nextMonth);
+        localDebits[dKey].creditedMonths = monthsArr;
+      }
+    }
+  }
+  setLocalStore('debits', localDebits);
+
+  // 3. Update Firebase Realtime Database
+  try {
+    const userSnap = await db.ref(`users/${username}`).once('value');
+    if (userSnap.exists()) {
+      const uData = userSnap.val();
+      const currBal = parseFloat(uData.availableBalance || 0);
+      await db.ref(`users/${username}`).update({
+        availableBalance: currBal + bonusAmount,
+        creditedMonthCount: nextMonth
+      });
+    }
+
+    const debitsSnap = await db.ref('debits').once('value');
+    if (debitsSnap.exists()) {
+      const debitsObj = debitsSnap.val();
+      for (let dk in debitsObj) {
+        if (debitsObj[dk].username === username && debitsObj[dk].status === 'Approved') {
+          const arr = debitsObj[dk].creditedMonths || [];
+          if (!arr.includes(nextMonth)) {
+            arr.push(nextMonth);
+            await db.ref(`debits/${dk}`).update({ creditedMonths: arr });
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Firebase RTDB credit month sync note:", err.message);
+  }
+
+  showToast(`✓ Credited Month ${nextMonth} payout (+$${bonusAmount} USD) to @${username}!`, 'success');
   loadAdminData();
 }
 
