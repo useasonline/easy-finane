@@ -1098,13 +1098,84 @@ async function handleDebitSubmit(event) {
 // 8. SCHEME DETAIL BREAKDOWN MODAL
 // ==========================================================================
 function openActiveSchemeDetails() {
-  const currentDebited = parseFloat(currentUser?.lockedDebitBalance || 0);
-  const sampleDebit = {
-    amount: currentDebited > 0 ? currentDebited : 10,
-    date: new Date().toLocaleDateString('en-US'),
-    monthlyBonus: currentDebited > 0 ? parseFloat((currentDebited * 0.2).toFixed(2)) : 2
-  };
-  openSchemeDetailsForDebit(sampleDebit);
+  const debitsMap = getLocalStore('debits') || {};
+  const userDebits = [];
+
+  for (let key in debitsMap) {
+    if (debitsMap[key].username === currentUser?.username) {
+      userDebits.push({ id: key, ...debitsMap[key] });
+    }
+  }
+
+  // Sort ascending by timestamp so Fund 1 is oldest, Fund 2 is second, etc.
+  userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  // Assign Fund Numbers
+  userDebits.forEach((d, idx) => {
+    if (!d.fundNumber) d.fundNumber = idx + 1;
+  });
+
+  // Filter only Approved / Active funds
+  const activeFunds = userDebits.filter(d => d.status === 'Approved');
+
+  if (activeFunds.length === 0) {
+    if (userDebits.length > 0) {
+      alert("Your fund deposit request is currently waiting for Admin confirmation.");
+    } else {
+      alert("No active debited scheme funds found. Click 'Debit Money' to start a scheme!");
+    }
+    return;
+  }
+
+  if (activeFunds.length === 1) {
+    // Single active fund: directly view its 12-month schedule
+    openSchemeDetailsForDebit(activeFunds[0]);
+  } else {
+    // Multiple active funds: show selection modal
+    const listContainer = document.getElementById('select-fund-list-container');
+    if (listContainer) {
+      listContainer.innerHTML = '';
+      activeFunds.forEach(debit => {
+        const card = document.createElement('div');
+        card.className = 'debit-item-card status-approved';
+        card.onclick = () => {
+          closeModal('modal-select-fund');
+          openSchemeDetailsForDebit(debit);
+        };
+
+        const inrDisp = debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : (debit.amount * 100);
+        const usdDisp = parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const fundLabel = `Fund ${debit.fundNumber}`;
+        const creditedCount = parseInt(debit.creditedMonthCount || (debit.creditedMonths ? debit.creditedMonths.length : 0));
+
+        card.innerHTML = `
+          <div class="debit-card-header">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span class="fund-badge-pill"><i class="fa-solid fa-vault"></i> ${fundLabel}</span>
+              <span class="debit-amount-tag">₹${inrDisp} ($${usdDisp} USD)</span>
+            </div>
+            <span class="debit-date-tag"><i class="fa-solid fa-calendar"></i> ${debit.date}</span>
+          </div>
+          <div class="debit-card-body" style="margin: 0.5rem 0;">
+            <div style="font-size: 0.82rem; color: #475569; margin-bottom: 0.35rem;"><i class="fa-solid fa-hashtag"></i> UTR ID: <strong>${debit.utr || 'N/A'}</strong></div>
+            <span class="badge-status success"><i class="fa-solid fa-circle-check"></i> ACCEPTED</span>
+          </div>
+          <div class="debit-card-details" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 0.5rem; font-size: 0.85rem;">
+            <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>$${debit.monthlyBonus || parseFloat((debit.amount * 0.2).toFixed(2))}/mo</strong></div>
+            <div class="payout-progress-pill" style="font-size: 0.78rem; padding: 0.2rem 0.5rem;">
+              <strong>${creditedCount} / 12</strong> Credited
+            </div>
+          </div>
+          <div style="margin-top: 0.35rem; color: var(--blue-primary); font-weight: 600; font-size: 0.85rem;">
+            View ${fundLabel} 12-Month Schedule <i class="fa-solid fa-chevron-right"></i>
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    document.getElementById('modal-select-fund').classList.remove('hidden');
+  }
 }
 
 function openSchemeDetailsForDebit(debit) {

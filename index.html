@@ -245,7 +245,7 @@
               <span id="val-debited-balance" class="amount-num">0.00</span>
             </div>
             <div class="card-info clickable-info">
-              <span><i class="fa-solid fa-arrow-trend-up"></i> Click to view monthly $2.00 USD profit return schedule</span>
+              <span><i class="fa-solid fa-vault"></i> Click to select active fund & 12-Month profit schedule</span>
               <i class="fa-solid fa-chevron-right"></i>
             </div>
           </div>
@@ -570,6 +570,28 @@
 
         <div class="scheme-info-footer">
           <p><i class="fa-solid fa-shield-halved"></i> <strong>Note on Withdrawal Policy:</strong> Your debited principal ($10) is locked into the 12-month savings scheme. Admin credits $2 into your <strong>Available Balance</strong> every month. You can withdraw the accumulated profit balance anytime!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: SELECT ACTIVE FUND SCHEME           -->
+  <!-- ========================================== -->
+  <div id="modal-select-fund" class="modal-overlay hidden">
+    <div class="modal-card wide">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-vault text-amber"></i> Select Active Fund Scheme</h3>
+        <button class="modal-close" onclick="closeModal('modal-select-fund')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert-box alert-info">
+          <i class="fa-solid fa-circle-info"></i> You have multiple active funds. Click on any fund below to view its specific 12-month schedule and monthly payment status.
+        </div>
+
+        <div id="select-fund-list-container" class="debits-grid margin-top">
+          <!-- Populated dynamically with active fund cards -->
         </div>
       </div>
     </div>
