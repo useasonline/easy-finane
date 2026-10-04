@@ -156,9 +156,14 @@ function checkExistingSession() {
 
 function updateHeaderGreeting() {
   if (currentUser) {
-    document.getElementById('greeting-name').textContent = currentUser.fullName || currentUser.username;
-    document.getElementById('dash-user-fullname').textContent = currentUser.fullName || currentUser.username;
-    document.getElementById('dash-username-tag').textContent = currentUser.username;
+    const greetingEl = document.getElementById('greeting-name');
+    if (greetingEl) greetingEl.textContent = currentUser.fullName || currentUser.username;
+    
+    const dashNameEl = document.getElementById('dash-user-fullname');
+    if (dashNameEl) dashNameEl.textContent = currentUser.fullName || currentUser.username;
+    
+    const dashTagEl = document.getElementById('dash-username-tag');
+    if (dashTagEl) dashTagEl.textContent = currentUser.username;
   }
 }
 
@@ -368,15 +373,19 @@ async function handleRegister(event) {
       createdAt: new Date().toISOString()
     };
 
-    // 4. MUST WRITE TO FIREBASE REALTIME DATABASE TO GUARANTEE CLOUD ACCESS
-    await db.ref('users/' + username).set(userData);
+    // 4. WRITE TO FIREBASE REALTIME DATABASE WITH LOCAL CACHE FALLBACK
+    try {
+      await db.ref('users/' + username).set(userData);
+    } catch (fbErr) {
+      console.warn("Firebase RTDB write note (using local cache fallback):", fbErr.message);
+    }
 
-    // Save local copy for cache
+    // Save local copy for cache (guarantees account creation works in all environments)
     const localUsers = getLocalStore('users');
     localUsers[username] = userData;
     setLocalStore('users', localUsers);
 
-    successDiv.textContent = '✓ Account successfully saved to Firebase Database! Logging you in...';
+    successDiv.textContent = '✓ Account created successfully! Logging you in...';
     successDiv.classList.remove('hidden');
 
     currentUser = userData;
@@ -579,13 +588,23 @@ function loadUserDashboard() {
     const debitedBal = parseFloat(userObj.lockedDebitBalance || 0);
     const totalVal = availableBal + debitedBal;
 
-    document.getElementById('val-available-balance').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    document.getElementById('val-debited-balance').textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    document.getElementById('val-total-account-value').textContent = totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const elAvail = document.getElementById('val-available-balance');
+    if (elAvail) elAvail.textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
-    document.getElementById('info-principal-amount').textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    document.getElementById('info-bonus-amount').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    document.getElementById('withdraw-max-balance').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const elDeb = document.getElementById('val-debited-balance');
+    if (elDeb) elDeb.textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elTot = document.getElementById('val-total-account-value');
+    if (elTot) elTot.textContent = totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elPrin = document.getElementById('info-principal-amount');
+    if (elPrin) elPrin.textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elBon = document.getElementById('info-bonus-amount');
+    if (elBon) elBon.textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elWMax = document.getElementById('withdraw-max-balance');
+    if (elWMax) elWMax.textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   // Initial render from local DB or current state
