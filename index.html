@@ -63,6 +63,13 @@
           </div>
         </div>
 
+        <div id="header-live-fx" class="header-fx-pill" title="Live USD to INR Exchange Rate">
+          <span class="fx-pulse-dot"><i class="fa-solid fa-circle"></i></span>
+          <span class="fx-pair-tag">1 USD</span>
+          <span class="fx-equal">=</span>
+          <span class="fx-rate-val">₹<span id="header-usd-inr-val">83.85</span> INR</span>
+        </div>
+
         <div id="user-nav-actions" class="nav-actions">
           <span id="nav-user-greeting" class="user-greeting">Welcome, <strong id="greeting-name">User</strong></span>
           <button id="btn-logout" class="btn-danger-sm" onclick="handleLogout()">
@@ -185,21 +192,26 @@
     <section id="page-home" class="page-view">
       <div class="dashboard-container">
         
-        <!-- LIVE USD TO INR EXCHANGE RATE BANNER -->
-        <div class="usd-rate-pill-container">
-          <div class="usd-rate-pill">
-            <div class="rate-icon-badge">
-              <i class="fa-solid fa-chart-line"></i>
+        <!-- LIVE USD TO INR EXCHANGE RATE HERO CARD -->
+        <div class="fx-live-hero-card">
+          <div class="fx-left">
+            <div class="fx-badge-icon">
+              <i class="fa-solid fa-arrow-trend-up"></i>
             </div>
-            <div class="rate-main-text">
-              <span class="rate-label">Live Market Exchange Rate:</span>
-              <span class="rate-value">
-                1 USD = <strong class="inr-highlight">₹<span id="live-usd-inr-val">83.85</span> INR</strong>
-              </span>
+            <div class="fx-info">
+              <div class="fx-title-row">
+                <span class="fx-title">Live Market Exchange Rate</span>
+                <span class="fx-live-pill"><i class="fa-solid fa-circle"></i> LIVE MARKET</span>
+              </div>
+              <div class="fx-currency-row">
+                <span class="currency-tag usd">🇺🇸 1 USD</span>
+                <span class="equal-sign">=</span>
+                <span class="currency-tag inr">🇮🇳 ₹<span id="live-usd-inr-val">83.85</span> INR</span>
+              </div>
             </div>
-            <div class="badge-live-pulse">
-              <i class="fa-solid fa-circle"></i> LIVE MARKET
-            </div>
+          </div>
+          <div class="fx-right-badge">
+            <span class="fx-sec-status"><i class="fa-solid fa-shield-check"></i> Verified Real-time Feed</span>
           </div>
         </div>
 

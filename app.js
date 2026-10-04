@@ -66,6 +66,9 @@ async function fetchLiveUsdRate() {
       const inrRate = parseFloat(data.rates.INR).toFixed(2);
       const rateEl = document.getElementById('live-usd-inr-val');
       if (rateEl) rateEl.textContent = inrRate;
+
+      const headerRateEl = document.getElementById('header-usd-inr-val');
+      if (headerRateEl) headerRateEl.textContent = inrRate;
     }
   } catch (e) {
     console.log("Live USD Rate note:", e.message);
