@@ -98,10 +98,90 @@ async function showAdminDashboard() {
   loadAdminData();
 }
 
+let debitsUnsub = null;
+
 function loadAdminData() {
+  // Render Pending Deposit & Scheme Debits Table
+  const renderDebitsTable = (debitsMap) => {
+    const tbody = document.getElementById('admin-debits-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    let pendingCount = 0;
+    const list = [];
+
+    for (let k in debitsMap) {
+      list.push({ id: k, ...debitsMap[k] });
+      if (debitsMap[k].status === 'Pending') pendingCount++;
+    }
+
+    const statPendingDebits = document.getElementById('stat-pending-debits');
+    if (statPendingDebits) statPendingDebits.textContent = pendingCount;
+
+    if (list.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">No deposit requests submitted yet.</td></tr>`;
+    } else {
+      list.reverse().forEach(req => {
+        const tr = document.createElement('tr');
+        const inrDisp = req.inrAmount ? req.inrAmount.toLocaleString('en-IN') : (req.amount * 100);
+        const usdDisp = parseFloat(req.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const statusStr = req.status || 'Pending';
+
+        let proofHtml = 'N/A';
+        if (req.proofUrl) {
+          proofHtml = `
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <img src="${req.proofUrl}" alt="Proof" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 1.5px solid #0284c7; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onclick="openAdminProofModal('${req.utr || 'N/A'}', '${req.proofUrl}')" title="Click to view full screenshot">
+              <button type="button" class="btn-secondary-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="openAdminProofModal('${req.utr || 'N/A'}', '${req.proofUrl}')">
+                <i class="fa-solid fa-eye"></i> View
+              </button>
+            </div>`;
+        }
+
+        let actionHtml = '';
+        if (statusStr === 'Pending') {
+          actionHtml = `
+            <button class="btn-emerald" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="adminApproveDebit('${req.id}')">
+              <i class="fa-solid fa-check"></i> Accept Payment
+            </button>
+            <button class="btn-danger-sm" onclick="adminRejectDebit('${req.id}')">Reject</button>
+          `;
+        } else if (statusStr === 'Approved') {
+          actionHtml = `<span class="text-green" style="font-weight: 700;"><i class="fa-solid fa-circle-check"></i> Accepted (In Vault)</span>`;
+        } else {
+          actionHtml = `<span class="text-danger" style="font-weight: 700;"><i class="fa-solid fa-circle-xmark"></i> Failed (Rejected)</span>`;
+        }
+
+        tr.innerHTML = `
+          <td><code>#${req.id.substring(0, 10)}</code></td>
+          <td><strong>${req.fullName || req.username}</strong><br><small class="text-muted">@${req.username}</small></td>
+          <td>${req.date}</td>
+          <td><strong class="text-blue">₹${inrDisp} ($${usdDisp} USD)</strong></td>
+          <td><code style="background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700;">${req.utr || 'N/A'}</code></td>
+          <td>${proofHtml}</td>
+          <td><span class="status-badge ${statusStr.toLowerCase()}">${statusStr}</span></td>
+          <td>${actionHtml}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  };
+
+  renderDebitsTable(getLocalStore('debits'));
+
+  try {
+    debitsUnsub = db.ref('debits').on('value', (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setLocalStore('debits', val);
+        renderDebitsTable(val);
+      }
+    });
+  } catch(e) {}
+
   // Render withdrawals function
   const renderWithdrawalsTable = (dataMap) => {
     const tbody = document.getElementById('admin-withdrawals-tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     let pendingCount = 0;
     const list = [];
@@ -111,7 +191,8 @@ function loadAdminData() {
       if (dataMap[k].status === 'Pending') pendingCount++;
     }
 
-    document.getElementById('stat-pending-withdrawals').textContent = pendingCount;
+    const statPendingW = document.getElementById('stat-pending-withdrawals');
+    if (statPendingW) statPendingW.textContent = pendingCount;
 
     if (list.length === 0) {
       tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">No withdrawal requests found.</td></tr>`;
@@ -164,6 +245,7 @@ function loadAdminData() {
   // Render users table function
   const renderUsersTable = (usersObj) => {
     const tbody = document.getElementById('admin-users-tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
     let totalUsers = 0;
     let totalSystemDebits = 0;
@@ -197,8 +279,11 @@ function loadAdminData() {
     if (totalUsers === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No user accounts created yet.</td></tr>`;
     }
-    document.getElementById('stat-total-users').textContent = totalUsers;
-    document.getElementById('stat-total-debits').textContent = totalSystemDebits.toLocaleString('en-US', { minimumFractionDigits: 2 });
+    const statUsers = document.getElementById('stat-total-users');
+    if (statUsers) statUsers.textContent = totalUsers;
+
+    const statDebits = document.getElementById('stat-total-debits');
+    if (statDebits) statDebits.textContent = totalSystemDebits.toLocaleString('en-US', { minimumFractionDigits: 2 });
   };
 
   renderUsersTable(getLocalStore('users'));
@@ -212,6 +297,79 @@ function loadAdminData() {
       }
     });
   } catch(e) {}
+}
+
+// ADMIN DEPOSIT APPROVAL & REJECTION ACTIONS
+async function adminApproveDebit(debitId) {
+  const localDebits = getLocalStore('debits');
+  const localUsers = getLocalStore('users');
+
+  if (localDebits[debitId]) {
+    localDebits[debitId].status = 'Approved';
+    setLocalStore('debits', localDebits);
+
+    const username = localDebits[debitId].username;
+    const usdAmount = parseFloat(localDebits[debitId].amount || 0);
+
+    if (localUsers[username]) {
+      const currentLocked = parseFloat(localUsers[username].lockedDebitBalance || 0);
+      localUsers[username].lockedDebitBalance = currentLocked + usdAmount;
+      setLocalStore('users', localUsers);
+    }
+  }
+
+  try {
+    const debSnap = await db.ref(`debits/${debitId}`).once('value');
+    if (debSnap.exists()) {
+      const debData = debSnap.val();
+      await db.ref(`debits/${debitId}`).update({ status: 'Approved' });
+      
+      const userSnap = await db.ref(`users/${debData.username}`).once('value');
+      if (userSnap.exists()) {
+        const currLocked = parseFloat(userSnap.val().lockedDebitBalance || 0);
+        await db.ref(`users/${debData.username}`).update({
+          lockedDebitBalance: currLocked + parseFloat(debData.amount || 0)
+        });
+      }
+    }
+  } catch (err) {
+    console.warn("Firebase RTDB approve debit sync note:", err.message);
+  }
+
+  showToast(`Deposit #${debitId} APPROVED! Funds added to User Vault.`, 'success');
+  loadAdminData();
+}
+
+async function adminRejectDebit(debitId) {
+  const localDebits = getLocalStore('debits');
+
+  if (localDebits[debitId]) {
+    localDebits[debitId].status = 'Rejected';
+    setLocalStore('debits', localDebits);
+  }
+
+  try {
+    await db.ref(`debits/${debitId}`).update({ status: 'Rejected' });
+  } catch (err) {
+    console.warn("Firebase RTDB reject debit sync note:", err.message);
+  }
+
+  showToast(`Deposit #${debitId} REJECTED. User history marked as Failed.`, 'info');
+  loadAdminData();
+}
+
+function openAdminProofModal(utr, proofUrl) {
+  const modal = document.getElementById('modal-proof-viewer');
+  const utrEl = document.getElementById('proof-utr-val');
+  const imgEl = document.getElementById('full-proof-img');
+  if (utrEl) utrEl.textContent = utr || 'N/A';
+  if (imgEl) imgEl.src = proofUrl || '';
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeAdminProofModal() {
+  const modal = document.getElementById('modal-proof-viewer');
+  if (modal) modal.classList.add('hidden');
 }
 
 // ADMIN ACTIONS

@@ -520,14 +520,27 @@
           </div>
 
           <div class="form-group margin-top">
-            <label for="debit-utr">Transaction Reference / UTR ID (Optional)</label>
-            <input type="text" id="debit-utr" placeholder="e.g. 20260202998877">
+            <label for="debit-utr"><i class="fa-solid fa-receipt"></i> 12-Digit Transaction Reference / UTR ID <span class="required-star">*</span></label>
+            <input type="text" id="debit-utr" placeholder="e.g. 428901987654 (Required)" required>
+            <small class="input-hint">Found in Google Pay, PhonePe, Paytm, or BHIM after payment</small>
+          </div>
+
+          <div class="form-group">
+            <label for="debit-proof"><i class="fa-solid fa-image"></i> Payment Screenshot / Receipt <span class="required-star">*</span></label>
+            <input type="file" id="debit-proof" accept="image/*" required onchange="previewDebitProof(this)">
+            <small class="input-hint">Upload payment confirmation screenshot (Cloudinary Storage)</small>
+          </div>
+
+          <div id="debit-proof-container" class="proof-preview-wrapper hidden">
+            <span class="preview-label">Payment Screenshot Preview:</span>
+            <img id="debit-proof-img" src="" alt="Payment Proof Preview" class="proof-preview-img">
           </div>
 
           <div id="debit-error" class="alert-box alert-error hidden"></div>
+          <div id="debit-success" class="alert-box alert-success hidden"></div>
 
-          <button type="submit" class="btn-primary full-width margin-top">
-            <i class="fa-solid fa-shield-heart"></i> Confirm & Save Debit
+          <button type="submit" id="btn-submit-debit" class="btn-primary full-width margin-top">
+            <i class="fa-solid fa-paper-plane"></i> Submit Deposit & Proof (Pending Admin Approval)
           </button>
         </form>
       </div>

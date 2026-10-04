@@ -644,21 +644,41 @@ function loadUserDashboard() {
       container.innerHTML = `
         <div class="empty-state">
           <i class="fa-solid fa-receipt empty-icon"></i>
-          <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your $10 monthly scheme!</p>
+          <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your ₹1,000 ($10 USD) monthly scheme!</p>
         </div>`;
     } else {
       userDebits.reverse().forEach(debit => {
         const card = document.createElement('div');
-        card.className = 'debit-item-card';
+        const status = debit.status || 'Pending';
+        card.className = `debit-item-card status-${status.toLowerCase()}`;
         card.onclick = () => openSchemeDetailsForDebit(debit);
+
+        let statusBadge = '<span class="badge-status pending"><i class="fa-solid fa-clock"></i> PENDING (Under Admin Review)</span>';
+        if (status === 'Approved') {
+          statusBadge = '<span class="badge-status success"><i class="fa-solid fa-circle-check"></i> ACCEPTED (Added to Vault)</span>';
+        } else if (status === 'Rejected') {
+          statusBadge = '<span class="badge-status danger"><i class="fa-solid fa-circle-xmark"></i> FAILED (Rejected)</span>';
+        }
+
+        const inrDisp = debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : (debit.amount * 100);
+        const usdDisp = parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const proofThumb = debit.proofUrl 
+          ? `<div class="debit-proof-thumb" onclick="event.stopPropagation(); window.open('${debit.proofUrl}', '_blank')"><img src="${debit.proofUrl}" alt="Proof Thumbnail" title="Click to view payment screenshot"></div>` 
+          : '';
+
         card.innerHTML = `
           <div class="debit-card-header">
-            <span class="debit-amount-tag">$${parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+            <span class="debit-amount-tag">₹${inrDisp} ($${usdDisp} USD)</span>
             <span class="debit-date-tag"><i class="fa-solid fa-calendar"></i> ${debit.date}</span>
           </div>
+          <div class="debit-card-body" style="margin: 0.5rem 0;">
+            <div style="font-size: 0.82rem; color: #475569; margin-bottom: 0.35rem;"><i class="fa-solid fa-hashtag"></i> UTR ID: <strong>${debit.utr || 'N/A'}</strong></div>
+            ${statusBadge}
+          </div>
+          ${proofThumb}
           <div class="debit-card-details">
             <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>$${debit.monthlyBonus || 2}/mo</strong> for 12 months</div>
-            <div><i class="fa-solid fa-shield-halved text-gold"></i> Active Fixed Scheme</div>
+            <div><i class="fa-solid fa-shield-halved text-gold"></i> Savings Scheme</div>
           </div>`;
         container.appendChild(card);
       });
@@ -859,69 +879,150 @@ function copyUPI() {
   });
 }
 
+function previewDebitProof(input) {
+  const container = document.getElementById('debit-proof-container');
+  const img = document.getElementById('debit-proof-img');
+  
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (img) img.src = e.target.result;
+      if (container) container.classList.remove('hidden');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+async function uploadToCloudinary(file) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', 'ml_default');
+  formData.append('api_key', 'bAT107fDGMlAk23sOOdcBJ5lSPM');
+
+  try {
+    const res = await fetch('https://api.cloudinary.com/v1_1/htuoyw6l/image/upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.secure_url) return data.secure_url;
+    }
+  } catch (e) {
+    console.warn("Cloudinary upload API note (using base64 fallback):", e.message);
+  }
+
+  // High-res base64 DataURL fallback guarantees proof screenshot is saved reliably
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.readAsDataURL(file);
+  });
+}
+
 async function handleDebitSubmit(event) {
   event.preventDefault();
 
   const inrAmount = parseFloat(document.getElementById('debit-amount').value);
   const debitDate = document.getElementById('debit-date').value;
   const utr = document.getElementById('debit-utr').value.trim();
+  const proofInput = document.getElementById('debit-proof');
   const errorDiv = document.getElementById('debit-error');
+  const successDiv = document.getElementById('debit-success');
+  const submitBtn = document.getElementById('btn-submit-debit');
 
   errorDiv.classList.add('hidden');
+  if (successDiv) successDiv.classList.add('hidden');
 
   if (!inrAmount || inrAmount < 100 || inrAmount > 25000) {
-    errorDiv.textContent = 'Please enter a valid debit amount between ₹100 and ₹25,000.';
+    errorDiv.textContent = 'Please enter a valid deposit amount between ₹100 and ₹25,000.';
     errorDiv.classList.remove('hidden');
     return;
   }
 
-  const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
-  const monthlyBonusUSD = parseFloat((usdAmount * 0.2).toFixed(2));
-  const debitId = 'deb_' + Date.now();
-
-  const debitRecord = {
-    id: debitId,
-    username: currentUser.username,
-    fullName: currentUser.fullName || currentUser.username,
-    amount: usdAmount, // Account balance stored in USD ($)
-    inrAmount: inrAmount, // Reference deposit amount in INR (₹)
-    date: debitDate || new Date().toLocaleDateString('en-US'),
-    monthlyBonus: monthlyBonusUSD,
-    monthsTotal: 12,
-    utr: utr || 'DIRECT_' + Date.now(),
-    timestamp: Date.now()
-  };
-
-  // 1. Update local storage DB
-  const localDebits = getLocalStore('debits');
-  localDebits[debitId] = debitRecord;
-  setLocalStore('debits', localDebits);
-
-  const localUsers = getLocalStore('users');
-  const currentLocked = parseFloat(currentUser.lockedDebitBalance || 0);
-  const newLocked = currentLocked + usdAmount;
-  if (localUsers[currentUser.username]) {
-    localUsers[currentUser.username].lockedDebitBalance = newLocked;
-    setLocalStore('users', localUsers);
+  if (!utr) {
+    errorDiv.textContent = 'Please enter the 12-digit Payment UTR ID / Reference Number.';
+    errorDiv.classList.remove('hidden');
+    return;
   }
 
-  currentUser.lockedDebitBalance = newLocked;
-  localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+  if (!proofInput || !proofInput.files || !proofInput.files[0]) {
+    errorDiv.textContent = 'Please attach a Payment Screenshot confirmation picture.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
 
-  // 2. Try Firebase push
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading Screenshot to Cloudinary...';
+  }
+
   try {
-    await ensureFirebaseAuth();
-    await db.ref('debits/' + debitId).set(debitRecord);
-    await db.ref('users/' + currentUser.username).update({
-      lockedDebitBalance: newLocked
-    });
-  } catch (err) {
-    console.warn("Firebase RTDB debit sync note:", err.message);
-  }
+    // 1. Upload payment proof to Cloudinary
+    const proofUrl = await uploadToCloudinary(proofInput.files[0]);
 
-  closeModal('modal-debit');
-  showToast(`Debited ₹${inrAmount.toLocaleString('en-IN')} ($${usdAmount.toFixed(2)} USD) successfully! Locked into scheme.`, 'success');
-  loadUserDashboard();
+    const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+    const monthlyBonusUSD = parseFloat((usdAmount * 0.2).toFixed(2));
+    const debitId = 'DEB-' + Date.now();
+
+    const debitRecord = {
+      id: debitId,
+      username: currentUser.username,
+      fullName: currentUser.fullName || currentUser.username,
+      amount: usdAmount, // USD ($)
+      inrAmount: inrAmount, // INR (₹)
+      date: debitDate || new Date().toLocaleDateString('en-US'),
+      monthlyBonus: monthlyBonusUSD,
+      monthsTotal: 12,
+      utr: utr,
+      proofUrl: proofUrl,
+      status: 'Pending', // PENDING ADMIN APPROVAL
+      timestamp: Date.now()
+    };
+
+    // 2. Save debit record to Local Storage DB
+    const localDebits = getLocalStore('debits');
+    localDebits[debitId] = debitRecord;
+    setLocalStore('debits', localDebits);
+
+    // 3. Save debit record to Firebase Realtime Database
+    try {
+      await ensureFirebaseAuth();
+      await db.ref('debits/' + debitId).set(debitRecord);
+    } catch (err) {
+      console.warn("Firebase RTDB debit sync note:", err.message);
+    }
+
+    if (successDiv) {
+      successDiv.textContent = `✓ Payment proof & UTR submitted! Your deposit of ₹${inrAmount.toLocaleString('en-IN')} ($${usdAmount} USD) is IN PROGRESS under Admin Review.`;
+      successDiv.classList.remove('hidden');
+    }
+
+    showToast(`Deposit submitted! Admin will verify UTR: ${utr}`, 'info');
+
+    setTimeout(() => {
+      document.getElementById('form-debit').reset();
+      const previewContainer = document.getElementById('debit-proof-container');
+      if (previewContainer) previewContainer.classList.add('hidden');
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Deposit & Proof (Pending Admin Approval)';
+      }
+
+      closeModal('modal-debit');
+      loadUserDashboard();
+    }, 1500);
+
+  } catch (err) {
+    console.error("Debit submission error:", err);
+    errorDiv.textContent = 'Could not upload payment proof or submit request. Please try again.';
+    errorDiv.classList.remove('hidden');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Deposit & Proof (Pending Admin Approval)';
+    }
+  }
 }
 
 // ==========================================================================

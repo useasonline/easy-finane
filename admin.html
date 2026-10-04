@@ -99,8 +99,16 @@
         <div class="admin-stat-card">
           <div class="stat-icon green"><i class="fa-solid fa-vault"></i></div>
           <div class="stat-details">
-            <span class="stat-title">Total System Debits</span>
+            <span class="stat-title">Total Approved Debits</span>
             <span class="stat-value">$<span id="stat-total-debits">0</span></span>
+          </div>
+        </div>
+
+        <div class="admin-stat-card">
+          <div class="stat-icon blue"><i class="fa-solid fa-receipt"></i></div>
+          <div class="stat-details">
+            <span class="stat-title">Pending Deposits</span>
+            <span id="stat-pending-debits" class="stat-value">0</span>
           </div>
         </div>
 
@@ -113,8 +121,38 @@
         </div>
       </div>
 
+      <!-- SECTION: PENDING DEPOSITS & SCHEME DEBITS APPROVAL (ACTION REQUIRED) -->
+      <div class="dash-section margin-top">
+        <div class="section-header">
+          <h3><i class="fa-solid fa-file-invoice-dollar text-blue"></i> Pending Deposit & Scheme Debit Approvals (Action Required)</h3>
+          <span class="badge-tag gold">Verify Cloudinary Payment Proof & UTR ID</span>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Debit ID</th>
+                <th>User / Username</th>
+                <th>Date</th>
+                <th>Deposit Amount</th>
+                <th>12-Digit UTR ID</th>
+                <th>Cloudinary Payment Proof</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-debits-tbody">
+              <tr>
+                <td colspan="8" class="text-center py-4">Loading deposit requests...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       <!-- SECTION: PENDING WITHDRAWALS APPROVAL -->
-      <div class="dash-section">
+      <div class="dash-section margin-top">
         <div class="section-header">
           <h3><i class="fa-solid fa-cash-register text-gold"></i> Pending Withdrawal Requests (Action Required)</h3>
         </div>
@@ -171,6 +209,22 @@
 
     </div>
   </section>
+
+  <!-- MODAL: FULL SCREENSHOT PAYMENT PROOF VIEWER -->
+  <div id="modal-proof-viewer" class="modal-overlay hidden">
+    <div class="modal-card wide text-center">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-image"></i> Payment Screenshot & UTR Verification</h3>
+        <button class="modal-close" onclick="closeAdminProofModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="proof-viewer-info" class="margin-bottom-sm"><strong>UTR ID:</strong> <span id="proof-utr-val">N/A</span></p>
+        <div class="full-proof-container">
+          <img id="full-proof-img" src="" alt="Cloudinary Payment Proof Full Size" style="max-width: 100%; max-height: 70vh; border-radius: 12px; border: 2px solid #bae6fd; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- TOAST NOTIFICATIONS -->
   <div id="toast-container" class="toast-container"></div>
