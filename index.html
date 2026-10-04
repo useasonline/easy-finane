@@ -186,13 +186,21 @@
       <div class="dashboard-container">
         
         <!-- LIVE USD TO INR EXCHANGE RATE BANNER -->
-        <div class="usd-rate-banner">
-          <div class="usd-rate-content">
-            <span class="flag-icon"><i class="fa-solid fa-chart-line text-green"></i></span>
-            <span>Live Market Exchange Rate: <strong>1 USD = ₹<span id="live-usd-inr-val">83.85</span> INR</strong></span>
-            <span class="badge-live-pulse"><i class="fa-solid fa-circle"></i> LIVE</span>
+        <div class="usd-rate-pill-container">
+          <div class="usd-rate-pill">
+            <div class="rate-icon-badge">
+              <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div class="rate-main-text">
+              <span class="rate-label">Live Market Exchange Rate:</span>
+              <span class="rate-value">
+                1 USD = <strong class="inr-highlight">₹<span id="live-usd-inr-val">83.85</span> INR</strong>
+              </span>
+            </div>
+            <div class="badge-live-pulse">
+              <i class="fa-solid fa-circle"></i> LIVE MARKET
+            </div>
           </div>
-          <small class="rate-conversion-note"><i class="fa-solid fa-calculator text-gold"></i> Scheme Deposit Conversion Rate: <strong>₹100 INR = $1.00 USD</strong> (e.g. ₹1,000 = $10 USD)</small>
         </div>
 
         <!-- WELCOME BANNER -->
