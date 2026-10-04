@@ -138,7 +138,7 @@ function loadAdminData() {
           <td><code>#${req.id.substring(0, 8)}</code></td>
           <td><strong>${req.fullName || req.username}</strong><br><small class="text-muted">@${req.username}</small></td>
           <td>${req.date}</td>
-          <td><strong class="text-green">₹${parseFloat(req.amount).toLocaleString('en-IN')}</strong></td>
+          <td><strong class="text-green">$${parseFloat(req.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
           <td><span class="badge-neutral">${req.method}</span></td>
           <td>${detailsDisplay}</td>
           <td><span class="status-badge ${req.status.toLowerCase()}">${req.status}</span></td>
@@ -180,11 +180,11 @@ function loadAdminData() {
         <td><strong>@${u.username}</strong></td>
         <td>${u.fullName || 'N/A'}</td>
         <td>${u.contactNumber || 'N/A'}</td>
-        <td>₹${locked.toLocaleString('en-IN')}</td>
-        <td><strong class="text-green">₹${available.toLocaleString('en-IN')}</strong></td>
+        <td>$${locked.toLocaleString('en-US', { minimumFractionDigits: 2 })}</td>
+        <td><strong class="text-green">$${available.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
         <td>
-          <button class="btn-secondary-sm" onclick="adminCreditBonus('${u.username}', 300)">
-            <i class="fa-solid fa-plus-circle text-green"></i> +₹300 Bonus
+          <button class="btn-secondary-sm" onclick="adminCreditBonus('${u.username}', 2)">
+            <i class="fa-solid fa-plus-circle text-green"></i> +$2 Bonus
           </button>
           <button class="btn-secondary-sm" onclick="adminCreditCustomBonus('${u.username}')">
             Custom
@@ -198,7 +198,7 @@ function loadAdminData() {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No user accounts created yet.</td></tr>`;
     }
     document.getElementById('stat-total-users').textContent = totalUsers;
-    document.getElementById('stat-total-debits').textContent = totalSystemDebits.toLocaleString('en-IN');
+    document.getElementById('stat-total-debits').textContent = totalSystemDebits.toLocaleString('en-US', { minimumFractionDigits: 2 });
   };
 
   renderUsersTable(getLocalStore('users'));
@@ -293,12 +293,12 @@ async function adminCreditBonus(username, amount) {
     console.warn("Firebase RTDB credit bonus sync note:", err.message);
   }
 
-  showToast(`Credited ₹${amount} monthly bonus to @${username}!`, 'success');
+  showToast(`Credited $${amount} monthly bonus to @${username}!`, 'success');
   loadAdminData();
 }
 
 function adminCreditCustomBonus(username) {
-  const val = prompt(`Enter bonus amount (₹) to credit for @${username}:`, "300");
+  const val = prompt(`Enter bonus amount ($) to credit for @${username}:`, "2");
   const amount = parseFloat(val);
   if (amount && amount > 0) {
     adminCreditBonus(username, amount);

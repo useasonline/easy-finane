@@ -558,13 +558,13 @@ function loadUserDashboard() {
     const debitedBal = parseFloat(userObj.lockedDebitBalance || 0);
     const totalVal = availableBal + debitedBal;
 
-    document.getElementById('val-available-balance').textContent = availableBal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    document.getElementById('val-debited-balance').textContent = debitedBal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
-    document.getElementById('val-total-account-value').textContent = totalVal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    document.getElementById('val-available-balance').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('val-debited-balance').textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('val-total-account-value').textContent = totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
-    document.getElementById('info-principal-amount').textContent = debitedBal.toLocaleString('en-IN');
-    document.getElementById('info-bonus-amount').textContent = availableBal.toLocaleString('en-IN');
-    document.getElementById('withdraw-max-balance').textContent = availableBal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+    document.getElementById('info-principal-amount').textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('info-bonus-amount').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById('withdraw-max-balance').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
   // Initial render from local DB or current state
@@ -604,7 +604,7 @@ function loadUserDashboard() {
       container.innerHTML = `
         <div class="empty-state">
           <i class="fa-solid fa-receipt empty-icon"></i>
-          <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your ₹1,000 monthly scheme!</p>
+          <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your $10 monthly scheme!</p>
         </div>`;
     } else {
       userDebits.reverse().forEach(debit => {
@@ -613,11 +613,11 @@ function loadUserDashboard() {
         card.onclick = () => openSchemeDetailsForDebit(debit);
         card.innerHTML = `
           <div class="debit-card-header">
-            <span class="debit-amount-tag">₹${parseFloat(debit.amount).toLocaleString('en-IN')}</span>
+            <span class="debit-amount-tag">$${parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
             <span class="debit-date-tag"><i class="fa-solid fa-calendar"></i> ${debit.date}</span>
           </div>
           <div class="debit-card-details">
-            <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>₹${debit.monthlyBonus || 300}/mo</strong> for 12 months</div>
+            <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>$${debit.monthlyBonus || 2}/mo</strong> for 12 months</div>
             <div><i class="fa-solid fa-shield-halved text-gold"></i> Active Fixed Scheme</div>
           </div>`;
         container.appendChild(card);
@@ -670,7 +670,7 @@ function loadUserDashboard() {
         row.innerHTML = `
           <td><code>#${w.id.substring(0, 8)}</code></td>
           <td>${w.date}</td>
-          <td><strong class="text-green">₹${parseFloat(w.amount).toLocaleString('en-IN')}</strong></td>
+          <td><strong class="text-green">$${parseFloat(w.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
           <td><span class="badge-neutral">${w.method}</span></td>
           <td><small>${detailsText}</small></td>
           <td><span class="status-badge ${statusBadgeClass}"><i class="fa-solid ${statusIcon}"></i> ${w.status}</span></td>
@@ -700,14 +700,14 @@ function updateProfitCalculator() {
   const rangeInput = document.getElementById('calc-amount-range');
   if (!rangeInput) return;
 
-  const amount = parseFloat(rangeInput.value) || 1000;
-  const monthlyProfit = Math.round(amount * 0.3);
-  const totalProfit = monthlyProfit * 12;
+  const amount = parseFloat(rangeInput.value) || 10;
+  const monthlyProfit = parseFloat((amount * 0.2).toFixed(2));
+  const totalProfit = parseFloat((monthlyProfit * 12).toFixed(2));
 
-  document.getElementById('calc-amount-label').textContent = '₹' + amount.toLocaleString('en-IN');
-  document.getElementById('calc-res-monthly').textContent = monthlyProfit.toLocaleString('en-IN');
-  document.getElementById('calc-res-total').textContent = totalProfit.toLocaleString('en-IN');
-  document.getElementById('calc-btn-amount').textContent = amount.toLocaleString('en-IN');
+  document.getElementById('calc-amount-label').textContent = '$' + amount.toLocaleString('en-US');
+  document.getElementById('calc-res-monthly').textContent = monthlyProfit.toLocaleString('en-US');
+  document.getElementById('calc-res-total').textContent = totalProfit.toLocaleString('en-US');
+  document.getElementById('calc-btn-amount').textContent = amount.toLocaleString('en-US');
 }
 
 function setCalcPreset(amount) {
@@ -719,7 +719,7 @@ function setCalcPreset(amount) {
 
   document.querySelectorAll('.btn-preset-sm').forEach(btn => {
     btn.classList.remove('active');
-    if (btn.textContent.includes(amount.toLocaleString())) {
+    if (btn.textContent.includes('$' + amount.toLocaleString('en-US')) || btn.textContent.includes(amount.toString())) {
       btn.classList.add('active');
     }
   });
@@ -727,7 +727,7 @@ function setCalcPreset(amount) {
 
 function startSchemeWithCalcAmount() {
   const rangeInput = document.getElementById('calc-amount-range');
-  const amount = parseFloat(rangeInput?.value || 1000);
+  const amount = parseFloat(rangeInput?.value || 10);
 
   openDebitModal();
   setDebitAmount(amount);
@@ -746,7 +746,7 @@ function setDebitAmount(amount) {
   
   document.querySelectorAll('.btn-preset').forEach(btn => {
     btn.classList.remove('active');
-    if (btn.textContent.includes(amount.toLocaleString())) {
+    if (btn.textContent.includes('$' + amount.toLocaleString('en-US')) || btn.textContent.includes(amount.toString())) {
       btn.classList.add('active');
     }
   });
@@ -756,20 +756,20 @@ function setDebitAmount(amount) {
 
 function generatePaymentQR() {
   const amountInput = document.getElementById('debit-amount');
-  let amount = parseFloat(amountInput.value) || 1000;
+  let amount = parseFloat(amountInput.value) || 10;
   
-  const monthlyBonus = Math.round(amount * 0.3);
-  const totalBonus = monthlyBonus * 12;
+  const monthlyBonus = parseFloat((amount * 0.2).toFixed(2));
+  const totalBonus = parseFloat((monthlyBonus * 12).toFixed(2));
 
-  document.getElementById('preview-debit-amount').textContent = amount.toLocaleString('en-IN');
-  document.getElementById('preview-monthly-bonus').textContent = monthlyBonus.toLocaleString('en-IN');
-  document.getElementById('preview-total-bonus').textContent = totalBonus.toLocaleString('en-IN');
-  document.getElementById('qr-amount-display').textContent = amount.toLocaleString('en-IN');
+  document.getElementById('preview-debit-amount').textContent = amount.toLocaleString('en-US');
+  document.getElementById('preview-monthly-bonus').textContent = monthlyBonus.toLocaleString('en-US');
+  document.getElementById('preview-total-bonus').textContent = totalBonus.toLocaleString('en-US');
+  document.getElementById('qr-amount-display').textContent = amount.toLocaleString('en-US');
 
   const qrcodeContainer = document.getElementById('qrcode');
   qrcodeContainer.innerHTML = '';
 
-  const upiString = `upi://pay?pa=easyfinance@upi&pn=EasyFinance&am=${amount}&cu=INR`;
+  const upiString = `upi://pay?pa=easyfinance@upi&pn=EasyFinance&am=${amount}&cu=USD`;
 
   if (window.QRCode) {
     new QRCode(qrcodeContainer, {
@@ -799,13 +799,13 @@ async function handleDebitSubmit(event) {
 
   errorDiv.classList.add('hidden');
 
-  if (!amount || amount < 100) {
-    errorDiv.textContent = 'Please enter a valid debit amount (Minimum ₹100).';
+  if (!amount || amount < 1) {
+    errorDiv.textContent = 'Please enter a valid debit amount (Minimum $1).';
     errorDiv.classList.remove('hidden');
     return;
   }
 
-  const monthlyBonus = Math.round(amount * 0.3);
+  const monthlyBonus = parseFloat((amount * 0.2).toFixed(2));
   const debitId = 'deb_' + Date.now();
 
   const debitRecord = {
@@ -813,7 +813,7 @@ async function handleDebitSubmit(event) {
     username: currentUser.username,
     fullName: currentUser.fullName || currentUser.username,
     amount: amount,
-    date: debitDate || new Date().toLocaleDateString('en-IN'),
+    date: debitDate || new Date().toLocaleDateString('en-US'),
     monthlyBonus: monthlyBonus,
     monthsTotal: 12,
     utr: utr || 'DIRECT_' + Date.now(),
@@ -848,7 +848,7 @@ async function handleDebitSubmit(event) {
   }
 
   closeModal('modal-debit');
-  showToast(`Debited ₹${amount.toLocaleString('en-IN')} successfully! Locked into scheme.`, 'success');
+  showToast(`Debited $${amount.toLocaleString('en-US')} successfully! Locked into scheme.`, 'success');
   loadUserDashboard();
 }
 
@@ -858,9 +858,9 @@ async function handleDebitSubmit(event) {
 function openActiveSchemeDetails() {
   const currentDebited = parseFloat(currentUser?.lockedDebitBalance || 0);
   const sampleDebit = {
-    amount: currentDebited > 0 ? currentDebited : 1000,
-    date: '2-2-2026',
-    monthlyBonus: currentDebited > 0 ? Math.round(currentDebited * 0.3) : 300
+    amount: currentDebited > 0 ? currentDebited : 10,
+    date: new Date().toLocaleDateString('en-US'),
+    monthlyBonus: currentDebited > 0 ? parseFloat((currentDebited * 0.2).toFixed(2)) : 2
   };
   openSchemeDetailsForDebit(sampleDebit);
 }
@@ -869,12 +869,12 @@ function openSchemeDetailsForDebit(debit) {
   const summaryBox = document.getElementById('scheme-modal-summary');
   const gridContainer = document.getElementById('scheme-timeline-grid');
 
-  const amount = debit.amount || 1000;
-  const date = debit.date || '2-2-2026';
-  const monthlyBonus = debit.monthlyBonus || 300;
+  const amount = debit.amount || 10;
+  const date = debit.date || new Date().toLocaleDateString('en-US');
+  const monthlyBonus = debit.monthlyBonus || 2;
 
   summaryBox.innerHTML = `
-    <i class="fa-solid fa-circle-check text-green"></i> Present on date <strong>${date}</strong> you debited <strong>₹${parseFloat(amount).toLocaleString('en-IN')} rupees</strong>. Per month you get <strong>₹${monthlyBonus} rupees</strong> for 12 months.
+    <i class="fa-solid fa-circle-check text-green"></i> Present on date <strong>${date}</strong> you debited <strong>$${parseFloat(amount).toLocaleString('en-US')}</strong>. Per month you get <strong>$${monthlyBonus}</strong> for 12 months.
   `;
 
   gridContainer.innerHTML = '';
@@ -886,7 +886,7 @@ function openSchemeDetailsForDebit(debit) {
     card.className = `month-card ${isCompletedMonth ? 'credited' : ''}`;
     card.innerHTML = `
       <div class="month-title">Month ${m}</div>
-      <div class="month-amount">₹${monthlyBonus}</div>
+      <div class="month-amount">$${monthlyBonus}</div>
       <div class="month-status">${isCompletedMonth ? '<i class="fa-solid fa-check"></i> Credited by Admin' : 'Scheduled'}</div>
     `;
     gridContainer.appendChild(card);
@@ -900,7 +900,7 @@ function openSchemeDetailsForDebit(debit) {
 // ==========================================================================
 function openWithdrawModal() {
   const availableBal = parseFloat(currentUser?.availableBalance || 0);
-  document.getElementById('withdraw-max-balance').textContent = availableBal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+  document.getElementById('withdraw-max-balance').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   document.getElementById('modal-withdraw').classList.remove('hidden');
 }
 
@@ -940,7 +940,7 @@ async function handleWithdrawSubmit(event) {
   }
 
   if (amount > availableBal) {
-    errorDiv.textContent = `Insufficient withdrawable bonus balance. Your max available profit balance is ₹${availableBal.toLocaleString('en-IN')}. (Locked debit principal cannot be withdrawn).`;
+    errorDiv.textContent = `Insufficient withdrawable bonus balance. Your max available profit balance is $${availableBal.toLocaleString('en-US')}. (Locked debit principal cannot be withdrawn).`;
     errorDiv.classList.remove('hidden');
     return;
   }
@@ -977,7 +977,7 @@ async function handleWithdrawSubmit(event) {
     method: method,
     details: details,
     status: 'Pending',
-    date: new Date().toLocaleDateString('en-IN'),
+    date: new Date().toLocaleDateString('en-US'),
     timestamp: Date.now()
   };
 
@@ -1008,7 +1008,7 @@ async function handleWithdrawSubmit(event) {
 
   closeModal('modal-withdraw');
   document.getElementById('form-withdraw').reset();
-  showToast(`Withdrawal request of ₹${amount} submitted! Status: PENDING`, 'info');
+  showToast(`Withdrawal request of $${amount} submitted! Status: PENDING`, 'info');
   loadUserDashboard();
 }
 
