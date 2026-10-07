@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>E Finance - Easy Finance Solutions</title>
+  <meta name="description" content="E Finance (Easy Finance) - Smart financial planning, monthly savings schemes, debits, and instant payouts.">
+  <link rel="icon" type="image/png" href="logo.png">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Firebase JS SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+
+  <!-- QR Code Generator Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+
+  <!-- ========================================== -->
+  <!-- 1. SPLASH SCREEN                           -->
+  <!-- ========================================== -->
+  <div id="splash-screen" class="splash-container">
+    <div class="splash-content">
+      <div class="logo-wrapper">
+        <div class="logo-glow"></div>
+        <div class="logo-img-badge">
+          <img src="logo.png" alt="E Finance Logo" class="app-web-logo">
+        </div>
+      </div>
+      <h1 class="splash-title">E Finance</h1>
+      <p class="splash-tagline">Easy Finance Solutions</p>
+      
+      <div class="splash-loader">
+        <div class="loader-bar"></div>
+      </div>
+      <button id="btn-skip-splash" class="btn-skip">Get Started <i class="fa-solid fa-arrow-right"></i></button>
+    </div>
+  </div>
+
+  <!-- MAIN APP CONTAINER -->
+  <div id="app-container" class="app-hidden">
+
+    <!-- NAVIGATION HEADER -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="brand-logo" onclick="navigateTo('home')">
+          <img src="logo.png" alt="E Finance Logo" class="header-logo-img">
+          <div class="brand-text">
+            <span class="brand-name">E Finance</span>
+            <span class="brand-sub">Easy Finance</span>
+          </div>
+        </div>
+
+        <div id="header-live-fx" class="header-fx-pill" title="Live USD to INR Exchange Rate">
+          <span class="fx-pulse-dot"><i class="fa-solid fa-circle"></i></span>
+          <span class="fx-pair-tag">1 USD</span>
+          <span class="fx-equal">=</span>
+          <span class="fx-rate-val">₹<span id="header-usd-inr-val">83.85</span> INR</span>
+        </div>
+
+        <div id="user-nav-actions" class="nav-actions">
+          <span id="nav-user-greeting" class="user-greeting">Welcome, <strong id="greeting-name">User</strong></span>
+          <button id="btn-logout" class="btn-danger-sm" onclick="handleLogout()">
+            <i class="fa-solid fa-right-from-bracket"></i> Logout
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- 2. LOGIN PAGE                              -->
+    <!-- ========================================== -->
+    <section id="page-login" class="page-view active">
+      <div class="auth-card">
+        <div class="auth-header">
+          <div class="auth-logo-box">
+            <img src="logo.png" alt="E Finance Logo" class="auth-logo-img">
+          </div>
+          <h2>Welcome to E Finance</h2>
+          <p>Sign in to manage your savings & earnings</p>
+        </div>
+
+        <form id="form-login" onsubmit="handleLogin(event)">
+          <div class="form-group">
+            <label for="login-username"><i class="fa-solid fa-user"></i> Username or Email</label>
+            <input type="text" id="login-username" placeholder="e.g. tat_1" required autocomplete="username">
+          </div>
+
+          <div class="form-group">
+            <label for="login-password"><i class="fa-solid fa-key"></i> Password</label>
+            <div class="input-with-icon">
+              <input type="password" id="login-password" placeholder="Enter your password" required autocomplete="current-password">
+              <i class="fa-solid fa-eye toggle-pw" onclick="togglePasswordVisibility('login-password', this)"></i>
+            </div>
+          </div>
+
+          <div id="login-error" class="alert-box alert-error hidden"></div>
+
+          <button type="submit" class="btn-primary full-width">
+            <span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>
+          </button>
+
+          <div class="auth-footer">
+            <p>Don't have an account? <a href="#" onclick="navigateTo('register'); return false;" class="link-highlight">Create Account</a></p>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- 3. REGISTER / CREATE ACCOUNT PAGE          -->
+    <!-- ========================================== -->
+    <section id="page-register" class="page-view">
+      <div class="auth-card wide">
+        <div class="auth-header">
+          <div class="auth-logo-box">
+            <img src="logo.png" alt="E Finance Logo" class="auth-logo-img">
+          </div>
+          <h2>Create New Account</h2>
+          <p>Join Easy Finance to start your 12-month growth scheme</p>
+        </div>
+
+        <form id="form-register" onsubmit="handleRegister(event)">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="reg-fullname"><i class="fa-solid fa-id-card"></i> Full Name</label>
+              <input type="text" id="reg-fullname" placeholder="Enter your full name" required>
+            </div>
+
+            <div class="form-group">
+              <label for="reg-contact"><i class="fa-solid fa-phone"></i> Contact Number</label>
+              <input type="tel" id="reg-contact" placeholder="10-digit mobile number" pattern="[0-9]{10}" required>
+            </div>
+
+            <div class="form-group full-column">
+              <label for="reg-username"><i class="fa-solid fa-at"></i> Username <span class="required-star">*</span></label>
+              <input type="text" id="reg-username" placeholder="e.g. tat_1" required onblur="checkUsernameAvailability()" oninput="resetUsernameValidation()">
+              <small id="username-feedback" class="input-hint">Unique username required for login (e.g. tat_1)</small>
+            </div>
+
+            <div class="form-group full-column">
+              <label for="reg-email"><i class="fa-solid fa-envelope"></i> Email Address</label>
+              <input type="email" id="reg-email" placeholder="name@example.com" required>
+            </div>
+
+            <div class="form-group">
+              <label for="reg-password"><i class="fa-solid fa-lock"></i> Password</label>
+              <div class="input-with-icon">
+                <input type="password" id="reg-password" placeholder="Min 6 characters" minlength="6" required>
+                <i class="fa-solid fa-eye toggle-pw" onclick="togglePasswordVisibility('reg-password', this)"></i>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="reg-confirm-password"><i class="fa-solid fa-check-double"></i> Confirm Password</label>
+              <div class="input-with-icon">
+                <input type="password" id="reg-confirm-password" placeholder="Re-enter password" required>
+                <i class="fa-solid fa-eye toggle-pw" onclick="togglePasswordVisibility('reg-confirm-password', this)"></i>
+              </div>
+            </div>
+          </div>
+
+          <div id="register-error" class="alert-box alert-error hidden"></div>
+          <div id="register-success" class="alert-box alert-success hidden"></div>
+
+          <button type="submit" id="btn-submit-register" class="btn-primary full-width margin-top">
+            <i class="fa-solid fa-user-check"></i> Create Account
+          </button>
+
+          <div class="auth-footer">
+            <p>Already have an account? <a href="#" onclick="navigateTo('login'); return false;" class="link-highlight">Login here</a></p>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- 4. HOME PAGE / USER DASHBOARD              -->
+    <!-- ========================================== -->
+    <section id="page-home" class="page-view">
+      <div class="dashboard-container">
+        
+        <!-- LIVE USD TO INR EXCHANGE RATE HERO CARD -->
+        <div class="fx-live-hero-card">
+          <div class="fx-left">
+            <div class="fx-badge-icon">
+              <i class="fa-solid fa-arrow-trend-up"></i>
+            </div>
+            <div class="fx-info">
+              <div class="fx-title-row">
+                <span class="fx-title">Live Market Exchange Rate</span>
+                <span class="fx-live-pill"><i class="fa-solid fa-circle"></i> LIVE MARKET</span>
+              </div>
+              <div class="fx-currency-row">
+                <span class="currency-tag usd">🇺🇸 1 USD</span>
+                <span class="equal-sign">=</span>
+                <span class="currency-tag inr">🇮🇳 ₹<span id="live-usd-inr-val">83.85</span> INR</span>
+              </div>
+            </div>
+          </div>
+          <div class="fx-right-badge">
+            <span class="fx-sec-status"><i class="fa-solid fa-shield-check"></i> Verified Real-time Feed</span>
+          </div>
+        </div>
+
+
+        <!-- BALANCE CARDS GRID -->
+        <div class="balance-cards-grid">
+          
+          <!-- AVAILABLE / WITHDRAWABLE BALANCE CARD -->
+          <div class="balance-card emerald-gradient">
+            <div class="card-top">
+              <span class="card-label">Available Balance (Withdrawable)</span>
+              <span class="badge-withdrawable"><i class="fa-solid fa-circle-check"></i> Ready to Withdraw</span>
+            </div>
+            <div class="card-amount">
+              <span class="currency">$</span>
+              <span id="val-available-balance" class="amount-num">0.00</span>
+            </div>
+            <div class="card-info">
+              <i class="fa-solid fa-circle-info"></i> Includes your monthly bonus credited by Admin (e.g. $2.00 USD/month).
+            </div>
+          </div>
+
+          <!-- LOCKED DEBIT PRINCIPAL CARD -->
+          <div class="balance-card gold-gradient" onclick="openActiveSchemeDetails()" title="Click to view scheme breakdown">
+            <div class="card-top">
+              <span class="card-label">Total Debited Principal (Fixed Scheme)</span>
+              <span class="badge-scheme"><i class="fa-solid fa-shield-halved"></i> Active Scheme</span>
+            </div>
+            <div class="card-amount">
+              <span class="currency">$</span>
+              <span id="val-debited-balance" class="amount-num">0.00</span>
+            </div>
+            <div class="card-info clickable-info">
+              <span><i class="fa-solid fa-vault"></i> Click to select active fund & 12-Month profit schedule</span>
+              <i class="fa-solid fa-chevron-right"></i>
+            </div>
+          </div>
+
+          <!-- TOTAL ACCOUNT VALUE CARD -->
+          <div class="balance-card dark-glass">
+            <div class="card-top">
+              <span class="card-label">Total Account Value</span>
+              <span class="badge-neutral">Combined</span>
+            </div>
+            <div class="card-amount">
+              <span class="currency">$</span>
+              <span id="val-total-account-value" class="amount-num">0.00</span>
+            </div>
+            <div class="card-info">
+              <span>Principal ($<span id="info-principal-amount">0.00</span> USD) + Available Bonus ($<span id="info-bonus-amount">0.00</span> USD)</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- MAIN ACTION BUTTONS -->
+        <div class="action-buttons-container">
+          <button class="btn-action btn-debit" onclick="openDebitModal()">
+            <div class="btn-icon-box">
+              <i class="fa-solid fa-circle-plus"></i>
+            </div>
+            <div class="btn-text-box">
+              <span class="btn-title">Debit Money</span>
+              <span class="btn-subtitle">Deposit in Rupees (₹100 = $1 USD) & generate QR</span>
+            </div>
+            <i class="fa-solid fa-chevron-right arrow-icon"></i>
+          </button>
+
+          <button class="btn-action btn-withdraw" onclick="openWithdrawModal()">
+            <div class="btn-icon-box">
+              <i class="fa-solid fa-arrow-up-from-bracket"></i>
+            </div>
+            <div class="btn-text-box">
+              <span class="btn-title">Withdraw Money</span>
+              <span class="btn-subtitle">Request payout of earned bonus balance</span>
+            </div>
+            <i class="fa-solid fa-chevron-right arrow-icon"></i>
+          </button>
+        </div>
+
+        <!-- HOW IT WORKS & STEP BY STEP GUIDE -->
+        <div class="dash-section how-it-works-section">
+          <div class="section-header">
+            <h3><i class="fa-solid fa-lightbulb text-gold"></i> How Easy Finance Works (3 Simple Steps)</h3>
+            <span class="badge-tag"><i class="fa-solid fa-shield-check text-green"></i> 100% Guaranteed 12-Month Returns</span>
+          </div>
+
+          <div class="steps-grid">
+            <div class="step-card">
+              <div class="step-number">1</div>
+              <div class="step-icon"><i class="fa-solid fa-wallet"></i></div>
+              <h4>Debit / Deposit Rupees</h4>
+              <p>Deposit any amount from <strong>₹100 to ₹25,000</strong> via instant UPI QR scanner. Every ₹100 converts to <strong>$1.00 USD</strong> in your account.</p>
+              <div class="step-tag">Step 1</div>
+            </div>
+
+            <div class="step-card highlight">
+              <div class="step-number">2</div>
+              <div class="step-icon"><i class="fa-solid fa-chart-line text-green"></i></div>
+              <h4>Earn $2 USD / Mo Bonus</h4>
+              <p>For every $10 USD (₹1,000) scheme deposit, receive <strong>$2.00 USD/month</strong> profit bonus credited for 12 months.</p>
+              <div class="step-tag green">20% Monthly Return</div>
+            </div>
+
+            <div class="step-card">
+              <div class="step-number">3</div>
+              <div class="step-icon"><i class="fa-solid fa-building-columns"></i></div>
+              <h4>Withdraw Profit Anytime</h4>
+              <p>Request instant payouts directly into your <strong>UPI ID</strong> or <strong>Bank Account</strong> with 0 fees!</p>
+              <div class="step-tag gold">Instant Payouts</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- INTERACTIVE PROFIT CALCULATOR -->
+        <div class="dash-section calc-section">
+          <div class="calc-card">
+            <div class="calc-header">
+              <div>
+                <h3><i class="fa-solid fa-calculator text-gold"></i> Interactive Scheme Profit & Return Calculator</h3>
+                <p>Calculate your guaranteed monthly USD payout & 12-month earnings before depositing in Rupees!</p>
+              </div>
+              <div class="calc-badge"><i class="fa-solid fa-arrow-trend-up"></i> 240% Total ROI</div>
+            </div>
+
+            <div class="calc-grid">
+              <div class="calc-inputs">
+                <label for="calc-amount-range">Deposit Amount (INR): <strong id="calc-amount-label" class="text-gold">₹1,000</strong></label>
+                <input type="range" id="calc-amount-range" min="100" max="25000" step="100" value="1000" oninput="updateProfitCalculator()">
+                
+                <div class="calc-presets">
+                  <button type="button" class="btn-preset-sm active" onclick="setCalcPreset(1000)">₹1,000</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(2500)">₹2,500</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(5000)">₹5,000</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(10000)">₹10,000</button>
+                  <button type="button" class="btn-preset-sm" onclick="setCalcPreset(25000)">₹25,000</button>
+                </div>
+              </div>
+
+              <div class="calc-results-box">
+                <div class="res-item">
+                  <span class="res-label">Converted Account Principal</span>
+                  <span class="res-value text-gold">$<span id="calc-res-usd">10.00</span> USD</span>
+                </div>
+                <div class="res-item">
+                  <span class="res-label">Monthly Payout Credit</span>
+                  <span class="res-value text-green">$<span id="calc-res-monthly">2.00</span> USD / mo</span>
+                </div>
+                <div class="res-item">
+                  <span class="res-label">12-Month Total Profit Return</span>
+                  <span class="res-value text-gold">$<span id="calc-res-total">24.00</span> USD</span>
+                </div>
+                <div class="res-item">
+                  <span class="res-label">Scheme Duration</span>
+                  <span class="res-value">12 Months (Fixed)</span>
+                </div>
+                
+                <button class="btn-primary full-width calc-cta-btn" onclick="startSchemeWithCalcAmount()">
+                  <i class="fa-solid fa-bolt"></i> Start Scheme With ₹<span id="calc-btn-amount">1,000</span> ($<span id="calc-btn-usd">10.00</span> USD)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SCHEME DEBIT SUMMARY & ACTIVE TRANSACTIONS -->
+        <div class="dash-section">
+          <div class="section-header">
+            <h3><i class="fa-solid fa-chart-pie"></i> Your Active Debits & Scheme Breakdown</h3>
+            <button class="btn-link" onclick="openActiveSchemeDetails()">View Full 12-Month Schedule</button>
+          </div>
+
+          <div id="debits-list-container" class="debits-grid">
+            <!-- Dynamic debits cards inserted here -->
+            <div class="empty-state">
+              <i class="fa-solid fa-receipt empty-icon"></i>
+              <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your ₹1,000 ($10 USD) monthly scheme!</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- WITHDRAWAL REQUESTS & HISTORY -->
+        <div class="dash-section margin-top">
+          <div class="section-header">
+            <h3><i class="fa-solid fa-clock-rotate-left"></i> Withdrawal Requests & Payout Status</h3>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Request ID</th>
+                  <th>Date</th>
+                  <th>Amount</th>
+                  <th>Method</th>
+                  <th>Details</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="user-withdrawals-tbody">
+                <tr>
+                  <td colspan="6" class="text-center py-4">No withdrawal history available</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TRUST & SECURITY BADGES -->
+        <div class="trust-features-grid">
+          <div class="trust-card">
+            <i class="fa-solid fa-lock text-gold"></i>
+            <div>
+              <h5>256-Bit Encrypted</h5>
+              <p>Bank-grade safety & secure transactions</p>
+            </div>
+          </div>
+
+          <div class="trust-card">
+            <i class="fa-solid fa-bolt text-green"></i>
+            <div>
+              <h5>Instant Payouts</h5>
+              <p>Direct UPI & Bank transfer settlement</p>
+            </div>
+          </div>
+
+          <div class="trust-card">
+            <i class="fa-solid fa-headset text-info"></i>
+            <div>
+              <h5>Dedicated Support</h5>
+              <p>24/7 assistance for scheme questions</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+  </div><!-- END #app-container -->
+
+  <!-- ========================================== -->
+  <!-- MODAL 1: DEBIT MONEY & QR SCANNER          -->
+  <!-- ========================================== -->
+  <div id="modal-debit" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-circle-plus"></i> Debit Money into Easy Finance Scheme</h3>
+        <button class="modal-close" onclick="closeModal('modal-debit')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <form id="form-debit" onsubmit="handleDebitSubmit(event)">
+          
+          <div class="form-group">
+            <label for="debit-amount">Enter Debit Amount in Rupees (₹)</label>
+            <div class="amount-input-wrapper">
+              <span class="currency-symbol">₹</span>
+              <input type="number" id="debit-amount" value="1000" min="100" max="25000" step="100" required oninput="generatePaymentQR()">
+            </div>
+            <small class="input-hint">Deposit range: <strong>₹100 to ₹25,000</strong> (Conversion rate: ₹100 = $1.00 USD)</small>
+            
+            <div class="preset-buttons" style="margin-top: 0.75rem;">
+              <button type="button" class="btn-preset" onclick="setDebitAmount(500)">₹500</button>
+              <button type="button" class="btn-preset active" onclick="setDebitAmount(1000)">₹1,000</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(2500)">₹2,500</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(5000)">₹5,000</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(10000)">₹10,000</button>
+              <button type="button" class="btn-preset" onclick="setDebitAmount(25000)">₹25,000</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="debit-date">Debited Date</label>
+            <input type="date" id="debit-date" required>
+            <small class="input-hint">Select the date of your debit deposit (e.g. 2-2-2026)</small>
+          </div>
+
+          <!-- SCHEME PROFIT BREAKDOWN CARD -->
+          <div class="scheme-preview-box">
+            <div class="scheme-header">
+              <i class="fa-solid fa-bullseye"></i> <strong>12-Month Profit Return Scheme</strong>
+            </div>
+            <div class="scheme-details">
+              <p>For your deposit of <strong>₹<span id="preview-debit-inr">1,000</span> INR</strong> (Converts to <strong>$<span id="preview-debit-amount">10.00</span> USD</strong> account balance):</p>
+              <ul>
+                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Monthly Bonus Credit:</strong> $<span id="preview-monthly-bonus">2.00</span> USD / month</li>
+                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Duration:</strong> 12 Months</li>
+                <li><i class="fa-solid fa-check-double text-green"></i> <strong>Total Bonus Returns:</strong> $<span id="preview-total-bonus">24.00</span> USD</li>
+              </ul>
+            </div>
+          </div>
+
+          <!-- DYNAMIC QR SCANNER SECTION -->
+          <div class="qr-section">
+            <div class="accepted-apps-header" style="background: linear-gradient(135deg, #0f172a, #1e293b); color: #ffffff; padding: 0.85rem 1rem; border-radius: 14px; margin-bottom: 1rem; text-align: center; border: 1px solid #334155; box-shadow: 0 4px 16px rgba(0,0,0,0.15);">
+              <div style="font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.6px; opacity: 0.9; margin-bottom: 0.5rem; color: #38bdf8; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+                <i class="fa-solid fa-shield-check" style="color: #22c55e;"></i> ALL UPI PAYMENT APPS ACCEPTED HERE
+              </div>
+              <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; flex-wrap: wrap;">
+                <!-- GPay -->
+                <div style="background: #ffffff; color: #1e293b; padding: 0.3rem 0.65rem; border-radius: 8px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+                  <i class="fa-brands fa-google" style="color: #4285f4;"></i> <span>GPay</span>
+                </div>
+                <!-- PhonePe -->
+                <div style="background: #5f259f; color: #ffffff; padding: 0.3rem 0.65rem; border-radius: 8px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(95,37,159,0.3);">
+                  <i class="fa-solid fa-mobile-screen-button" style="color: #ffffff;"></i> <span>PhonePe</span>
+                </div>
+                <!-- Paytm -->
+                <div style="background: #00baf2; color: #ffffff; padding: 0.3rem 0.65rem; border-radius: 8px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(0,186,242,0.3);">
+                  <i class="fa-solid fa-wallet" style="color: #ffffff;"></i> <span>Paytm</span>
+                </div>
+                <!-- Amazon Pay -->
+                <div style="background: #232f3e; color: #ff9900; padding: 0.3rem 0.65rem; border-radius: 8px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(0,0,0,0.2); border: 1px solid #374151;">
+                  <i class="fa-brands fa-amazon" style="color: #ff9900;"></i> <span style="color: #ffffff;">Amazon Pay</span>
+                </div>
+                <!-- Navi Pay -->
+                <div style="background: #00d09c; color: #ffffff; padding: 0.3rem 0.65rem; border-radius: 8px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(0,208,156,0.3);">
+                  <i class="fa-solid fa-compass" style="color: #ffffff;"></i> <span>Navi Pay</span>
+                </div>
+                <!-- FamPay -->
+                <div style="background: linear-gradient(135deg, #ff4081, #d81b60); color: #ffffff; padding: 0.3rem 0.65rem; border-radius: 8px; font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; gap: 0.35rem; box-shadow: 0 2px 6px rgba(255,64,129,0.3);">
+                  <i class="fa-solid fa-credit-card" style="color: #ffffff;"></i> <span>FamPay</span>
+                </div>
+              </div>
+            </div>
+
+            <h4><i class="fa-solid fa-qrcode"></i> Scan & Pay via Instant UPI QR</h4>
+            <p style="margin-bottom: 0.85rem;">Scan using any app above to pay fixed price: <strong>₹<span id="qr-amount-display">1,000</span> INR</strong></p>
+
+            <div class="qr-container-wrapper">
+              <div id="qrcode" class="qr-box"></div>
+            </div>
+          </div>
+
+          <div class="form-group margin-top">
+            <label for="debit-utr"><i class="fa-solid fa-receipt"></i> 12-Digit Transaction Reference / UTR ID <span class="required-star">*</span></label>
+            <input type="text" id="debit-utr" placeholder="e.g. 428901987654 (Required)" required>
+            <small class="input-hint">Found in Google Pay, PhonePe, Paytm, or BHIM after payment</small>
+          </div>
+
+          <div class="form-group">
+            <label for="debit-proof"><i class="fa-solid fa-image"></i> Payment Screenshot / Receipt <span class="required-star">*</span></label>
+            <input type="file" id="debit-proof" accept="image/*" required onchange="previewDebitProof(this)">
+            <small class="input-hint">Upload payment confirmation screenshot (Cloudinary Storage)</small>
+          </div>
+
+          <div id="debit-proof-container" class="proof-preview-wrapper hidden">
+            <span class="preview-label">Payment Screenshot Preview:</span>
+            <img id="debit-proof-img" src="" alt="Payment Proof Preview" class="proof-preview-img">
+          </div>
+
+          <div id="debit-error" class="alert-box alert-error hidden"></div>
+          <div id="debit-success" class="alert-box alert-success hidden"></div>
+
+          <button type="submit" id="btn-submit-debit" class="btn-primary full-width margin-top">
+            <i class="fa-solid fa-paper-plane"></i> Submit Deposit & Proof (Pending Admin Approval)
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 2: SCHEME DETAILS BREAKDOWN          -->
+  <!-- ========================================== -->
+  <div id="modal-scheme-details" class="modal-overlay hidden">
+    <div class="modal-card wide">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-chart-line"></i> Scheme Investment & Profit Breakdown</h3>
+        <button class="modal-close" onclick="closeModal('modal-scheme-details')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div id="scheme-modal-summary" class="scheme-summary-banner">
+          <!-- Populated dynamically -->
+        </div>
+
+        <h4 class="margin-top"><i class="fa-solid fa-calendar-days"></i> 12-Month Earnings Schedule</h4>
+        
+        <div class="schedule-timeline" id="scheme-timeline-grid">
+          <!-- Dynamic 12-month grid cards -->
+        </div>
+
+        <div class="scheme-info-footer">
+          <p><i class="fa-solid fa-shield-halved"></i> <strong>Note on Withdrawal Policy:</strong> Your debited principal ($10) is locked into the 12-month savings scheme. Admin credits $2 into your <strong>Available Balance</strong> every month. You can withdraw the accumulated profit balance anytime!</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL: SELECT ACTIVE FUND SCHEME           -->
+  <!-- ========================================== -->
+  <div id="modal-select-fund" class="modal-overlay hidden">
+    <div class="modal-card wide">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-vault text-amber"></i> Select Active Fund Scheme</h3>
+        <button class="modal-close" onclick="closeModal('modal-select-fund')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="alert-box alert-info">
+          <i class="fa-solid fa-circle-info"></i> You have multiple active funds. Click on any fund below to view its specific 12-month schedule and monthly payment status.
+        </div>
+
+        <div id="select-fund-list-container" class="debits-grid margin-top">
+          <!-- Populated dynamically with active fund cards -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================== -->
+  <!-- MODAL 3: WITHDRAW MONEY                    -->
+  <!-- ========================================== -->
+  <div id="modal-withdraw" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-arrow-up-from-bracket"></i> Withdraw Bonus Balance</h3>
+        <button class="modal-close" onclick="closeModal('modal-withdraw')">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        
+        <div class="withdraw-balance-banner">
+          <span>Available Withdrawable Balance:</span>
+          <strong class="text-green">$<span id="withdraw-max-balance">0.00</span></strong>
+        </div>
+
+        <div class="alert-box alert-info">
+          <i class="fa-solid fa-circle-info"></i> You can only withdraw your earned bonus balance. The debited principal amount is fixed in your active scheme.
+        </div>
+
+        <form id="form-withdraw" onsubmit="handleWithdrawSubmit(event)">
+          
+          <div class="form-group">
+            <label for="withdraw-amount">Enter Withdrawal Amount ($)</label>
+            <div class="amount-input-wrapper">
+              <span class="currency-symbol">$</span>
+              <input type="number" id="withdraw-amount" placeholder="e.g. 10" min="1" step="0.5" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Select Withdrawal Option</label>
+            <div class="radio-options-grid">
+              <label class="radio-card selected" onclick="selectWithdrawMethod('UPI')">
+                <input type="radio" name="withdraw-method" value="UPI" checked>
+                <div class="radio-content">
+                  <i class="fa-solid fa-qrcode"></i>
+                  <span>UPI ID</span>
+                </div>
+              </label>
+
+              <label class="radio-card" onclick="selectWithdrawMethod('BANK')">
+                <input type="radio" name="withdraw-method" value="BANK">
+                <div class="radio-content">
+                  <i class="fa-solid fa-building-columns"></i>
+                  <span>Bank Account</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- METHOD 1: UPI DETAILS -->
+          <div id="withdraw-method-upi" class="method-fields">
+            <div class="form-group">
+              <label for="w-upi-id"><i class="fa-solid fa-at"></i> Enter Your UPI ID</label>
+              <input type="text" id="w-upi-id" placeholder="e.g. username@upi or 9876543210@paytm">
+            </div>
+          </div>
+
+          <!-- METHOD 2: BANK DETAILS -->
+          <div id="withdraw-method-bank" class="method-fields hidden">
+            <div class="form-group">
+              <label for="w-bank-acc"><i class="fa-solid fa-credit-card"></i> Bank Account Number</label>
+              <input type="text" id="w-bank-acc" placeholder="Enter account number">
+            </div>
+            
+            <div class="form-group">
+              <label for="w-bank-ifsc"><i class="fa-solid fa-code-commit"></i> IFSC Code</label>
+              <input type="text" id="w-bank-ifsc" placeholder="e.g. SBIN0001234" style="text-transform: uppercase;">
+            </div>
+
+            <div class="form-group">
+              <label for="w-bank-holder"><i class="fa-solid fa-user"></i> Account Holder Name</label>
+              <input type="text" id="w-bank-holder" placeholder="Name as per bank records">
+            </div>
+          </div>
+
+          <div id="withdraw-error" class="alert-box alert-error hidden"></div>
+
+          <button type="submit" class="btn-primary full-width margin-top">
+            <i class="fa-solid fa-paper-plane"></i> Submit Withdrawal Request
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS CONTAINER -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Application Logic -->
+  <script src="app.js"></script>
+</body>
+</html>

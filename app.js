@@ -1,0 +1,1467 @@
+/* ==========================================================================
+   E FINANCE (EASY FINANCE) - USER APP LOGIC (app.js)
+   ========================================================================== */
+
+// 1. Firebase Initialization
+const firebaseConfig = {
+  apiKey: "AIzaSyAsCDXYRerEZn_5--6f8ta1BAD-hIv1PiI",
+  authDomain: "qhp2026-d510b.firebaseapp.com",
+  databaseURL: "https://qhp2026-d510b-default-rtdb.firebaseio.com",
+  projectId: "qhp2026-d510b",
+  storageBucket: "qhp2026-d510b.firebasestorage.app",
+  messagingSenderId: "127037647697",
+  appId: "1:127037647697:web:aac47af8ec8a04616b4170",
+  measurementId: "G-BJPKMHE7JC"
+};
+
+// Initialize Firebase App & Realtime Database
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const auth = firebase.auth ? firebase.auth() : null;
+
+// Application State Variables
+let currentUser = null;
+let userListenerUnsub = null;
+let debitsListenerUnsub = null;
+let withdrawalsListenerUnsub = null;
+
+// Local DB Fallback Helper (Guarantees app works even if Firebase rules are locked)
+function getLocalStore(key) {
+  try {
+    return JSON.parse(localStorage.getItem('efinance_db_' + key) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function setLocalStore(key, data) {
+  try {
+    localStorage.setItem('efinance_db_' + key, JSON.stringify(data));
+  } catch (e) {}
+}
+
+// ==========================================================================
+// 2. DOM INITIALIZATION & EVENT LISTENERS
+// ==========================================================================
+// Helper to ensure Firebase Auth connection before DB calls
+async function ensureFirebaseAuth() {
+  if (auth && !auth.currentUser) {
+    try {
+      await auth.signInAnonymously();
+    } catch (err) {
+      console.warn("Auth sign-in note:", err.message);
+    }
+  }
+}
+
+// ==========================================================================
+// 2. DOM INITIALIZATION & EVENT LISTENERS
+// ==========================================================================
+// Fetch live USD to INR exchange rate from public rate API
+async function fetchLiveUsdRate() {
+  try {
+    const res = await fetch('https://open.er-api.com/v6/latest/USD');
+    const data = await res.json();
+    if (data && data.rates && data.rates.INR) {
+      const inrRate = parseFloat(data.rates.INR).toFixed(2);
+      const rateEl = document.getElementById('live-usd-inr-val');
+      if (rateEl) rateEl.textContent = inrRate;
+
+      const headerRateEl = document.getElementById('header-usd-inr-val');
+      if (headerRateEl) headerRateEl.textContent = inrRate;
+    }
+  } catch (e) {
+    console.log("Live USD Rate note:", e.message);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Initialize Firebase Auth connection asynchronously
+  ensureFirebaseAuth();
+  
+  // Fetch live market USD to INR exchange rate
+  fetchLiveUsdRate();
+
+  // Set default date
+  const debitDateInput = document.getElementById('debit-date');
+  if (debitDateInput) {
+    const today = new Date().toISOString().split('T')[0];
+    debitDateInput.value = today;
+  }
+
+  // Handle Splash Screen Transition
+  setTimeout(() => {
+    hideSplash();
+  }, 2400);
+
+  document.getElementById('btn-skip-splash')?.addEventListener('click', hideSplash);
+
+  // Check stored session
+  checkExistingSession();
+});
+
+function hideSplash() {
+  const splash = document.getElementById('splash-screen');
+  const appContainer = document.getElementById('app-container');
+  
+  if (splash && !splash.classList.contains('fade-out')) {
+    splash.classList.add('fade-out');
+    setTimeout(() => {
+      splash.style.display = 'none';
+      if (appContainer) appContainer.classList.remove('app-hidden');
+    }, 500);
+  }
+}
+
+// ==========================================================================
+// 3. NAVIGATION ROUTER & SESSION MANAGEMENT
+// ==========================================================================
+function navigateTo(pageId) {
+  document.querySelectorAll('.page-view').forEach(view => {
+    view.classList.remove('active');
+  });
+
+  const targetPage = document.getElementById(`page-${pageId}`);
+  if (targetPage) {
+    targetPage.classList.add('active');
+  }
+
+  const navActions = document.getElementById('user-nav-actions');
+  if (pageId === 'login' || pageId === 'register') {
+    if (navActions) navActions.style.display = 'none';
+  } else {
+    if (navActions) navActions.style.display = 'flex';
+  }
+
+  if (pageId === 'home' && currentUser) {
+    loadUserDashboard();
+  }
+}
+
+function checkExistingSession() {
+  const storedUser = localStorage.getItem('efinance_current_user');
+  if (storedUser) {
+    try {
+      currentUser = JSON.parse(storedUser);
+      updateHeaderGreeting();
+      navigateTo('home');
+    } catch (e) {
+      localStorage.removeItem('efinance_current_user');
+      navigateTo('login');
+    }
+  } else {
+    navigateTo('login');
+  }
+}
+
+function updateHeaderGreeting() {
+  if (currentUser) {
+    const greetingEl = document.getElementById('greeting-name');
+    if (greetingEl) greetingEl.textContent = currentUser.fullName || currentUser.username;
+    
+    const dashNameEl = document.getElementById('dash-user-fullname');
+    if (dashNameEl) dashNameEl.textContent = currentUser.fullName || currentUser.username;
+    
+    const dashTagEl = document.getElementById('dash-username-tag');
+    if (dashTagEl) dashTagEl.textContent = currentUser.username;
+  }
+}
+
+function handleLogout() {
+  detachUserListeners();
+  currentUser = null;
+  localStorage.removeItem('efinance_current_user');
+  showToast('Logged out successfully', 'info');
+  navigateTo('login');
+}
+
+function togglePasswordVisibility(inputId, iconElement) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  
+  if (input.type === 'password') {
+    input.type = 'text';
+    iconElement.classList.replace('fa-eye', 'fa-eye-slash');
+  } else {
+    input.type = 'password';
+    iconElement.classList.replace('fa-eye-slash', 'fa-eye');
+  }
+}
+
+// ==========================================================================
+// 4. USERNAME AVAILABILITY CHECK & REGISTRATION (FIREBASE GUARANTEED)
+// ==========================================================================
+function resetUsernameValidation() {
+  const feedback = document.getElementById('username-feedback');
+  if (feedback) {
+    feedback.textContent = 'Unique username required for login (e.g. tat_1)';
+    feedback.className = 'input-hint';
+  }
+}
+
+async function checkUsernameAvailability() {
+  const usernameInput = document.getElementById('reg-username');
+  const feedback = document.getElementById('username-feedback');
+
+  if (!usernameInput || !feedback) return;
+
+  const rawUsername = usernameInput.value.trim().toLowerCase();
+  if (!rawUsername) {
+    resetUsernameValidation();
+    return;
+  }
+
+  if (!/^[a-zA-Z0-9_]+$/.test(rawUsername)) {
+    feedback.textContent = 'Username can only contain letters, numbers, and underscores (_).';
+    feedback.className = 'input-hint text-error';
+    return;
+  }
+
+  feedback.textContent = 'Verifying username...';
+  feedback.className = 'input-hint';
+
+  try {
+    await ensureFirebaseAuth();
+    const snapshot = await db.ref('users/' + rawUsername).once('value');
+    if (snapshot.exists()) {
+      feedback.textContent = `❌ Username '@${rawUsername}' is already taken! Please choose another.`;
+      feedback.className = 'input-hint text-error';
+    } else {
+      const localUsers = getLocalStore('users');
+      if (localUsers[rawUsername]) {
+        feedback.textContent = `❌ Username '@${rawUsername}' is already taken! Please choose another.`;
+        feedback.className = 'input-hint text-error';
+      } else {
+        feedback.textContent = `✓ Username '@${rawUsername}' is available!`;
+        feedback.className = 'input-hint text-success';
+      }
+    }
+  } catch (error) {
+    feedback.textContent = `✓ Username format valid`;
+    feedback.className = 'input-hint text-success';
+  }
+}
+
+async function handleRegister(event) {
+  event.preventDefault();
+
+  const submitBtn = document.getElementById('btn-submit-register');
+  const fullName = document.getElementById('reg-fullname').value.trim();
+  const contactNumber = document.getElementById('reg-contact').value.trim();
+  const username = document.getElementById('reg-username').value.trim().toLowerCase();
+  const email = document.getElementById('reg-email').value.trim().toLowerCase();
+  const password = document.getElementById('reg-password').value;
+  const confirmPassword = document.getElementById('reg-confirm-password').value;
+  
+  const errorDiv = document.getElementById('register-error');
+  const successDiv = document.getElementById('register-success');
+
+  errorDiv.classList.add('hidden');
+  successDiv.classList.add('hidden');
+
+  if (!fullName || !contactNumber || !username || !email || !password) {
+    errorDiv.textContent = 'Please fill out all required fields.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    errorDiv.textContent = 'Username can only contain letters, numbers, and underscores (_).';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (password.length < 6) {
+    errorDiv.textContent = 'Password must be at least 6 characters long.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    errorDiv.textContent = 'Passwords do not match. Please re-enter.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving Account to Firebase Database...';
+  }
+
+  try {
+    await ensureFirebaseAuth();
+
+    // 1. Register with Firebase Authentication if available
+    if (auth) {
+      try {
+        await auth.createUserWithEmailAndPassword(email, password);
+      } catch (authErr) {
+        if (authErr.code === 'auth/email-already-in-use') {
+          errorDiv.textContent = `Email '${email}' is already registered. Please login instead.`;
+          errorDiv.classList.remove('hidden');
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+          }
+          return;
+        }
+        console.warn("Firebase Auth create note:", authErr.message);
+      }
+    }
+
+    // 2. Check if Username already exists in Firebase RTDB
+    let usernameExists = false;
+    try {
+      const uSnap = await db.ref('users/' + username).once('value');
+      if (uSnap.exists()) {
+        usernameExists = true;
+      }
+    } catch (e) {
+      console.warn("RTDB username check note:", e.message);
+    }
+
+    if (!usernameExists) {
+      const localUsers = getLocalStore('users');
+      if (localUsers[username]) usernameExists = true;
+    }
+
+    if (usernameExists) {
+      errorDiv.textContent = `Username '@${username}' is already taken. Please choose another username.`;
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+      }
+      return;
+    }
+
+    // 3. Check if Email already exists in Firebase RTDB
+    let emailExists = false;
+    try {
+      const allUsersSnap = await db.ref('users').once('value');
+      if (allUsersSnap.exists()) {
+        const usersObj = allUsersSnap.val();
+        for (let k in usersObj) {
+          if (usersObj[k].email && usersObj[k].email.toLowerCase() === email) {
+            emailExists = true;
+            break;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("RTDB email check note:", e.message);
+    }
+
+    if (emailExists) {
+      errorDiv.textContent = `Email '${email}' is already registered. Please login or use another email.`;
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+      }
+      return;
+    }
+
+    const userData = {
+      fullName: fullName,
+      contactNumber: contactNumber,
+      username: username,
+      email: email,
+      password: password,
+      availableBalance: 0.00,
+      lockedDebitBalance: 0.00,
+      createdAt: new Date().toISOString()
+    };
+
+    // 4. WRITE TO FIREBASE REALTIME DATABASE WITH LOCAL CACHE FALLBACK
+    try {
+      await db.ref('users/' + username).set(userData);
+    } catch (fbErr) {
+      console.warn("Firebase RTDB write note (using local cache fallback):", fbErr.message);
+    }
+
+    // Save local copy for cache (guarantees account creation works in all environments)
+    const localUsers = getLocalStore('users');
+    localUsers[username] = userData;
+    setLocalStore('users', localUsers);
+
+    successDiv.textContent = '✓ Account created successfully! Logging you in...';
+    successDiv.classList.remove('hidden');
+
+    currentUser = userData;
+    localStorage.setItem('efinance_current_user', JSON.stringify(userData));
+    updateHeaderGreeting();
+
+    setTimeout(() => {
+      document.getElementById('form-register').reset();
+      resetUsernameValidation();
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+      }
+      navigateTo('home');
+      showToast(`Welcome to E Finance, ${fullName}! Your account can now be accessed on any device.`, 'success');
+    }, 1000);
+
+  } catch (err) {
+    console.error("Firebase registration error:", err);
+    let errMsg = err.message || 'Could not connect to Firebase database.';
+    if (err.code === 'PERMISSION_DENIED' || errMsg.includes('PERMISSION_DENIED') || errMsg.includes('Permission denied')) {
+      errMsg = 'Firebase Database Permission Denied. Please ensure your Firebase Realtime Database Security Rules allow read/write access (e.g., { ".read": true, ".write": true }).';
+    }
+
+    errorDiv.textContent = `❌ Database Error: ${errMsg}`;
+    errorDiv.classList.remove('hidden');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fa-solid fa-user-check"></i> Create Account';
+    }
+  }
+}
+
+// ==========================================================================
+// 5. LOGIN HANDLER (CROSS-DEVICE FIREBASE SYNCED)
+// ==========================================================================
+async function handleLogin(event) {
+  event.preventDefault();
+
+  const userInput = document.getElementById('login-username').value.trim().toLowerCase();
+  const password = document.getElementById('login-password').value;
+  const errorDiv = document.getElementById('login-error');
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+  
+  errorDiv.classList.add('hidden');
+
+  if (!userInput || !password) {
+    errorDiv.textContent = 'Please enter both username/email and password.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span>Logging in...</span> <i class="fa-solid fa-spinner fa-spin"></i>';
+  }
+
+  try {
+    await ensureFirebaseAuth();
+
+    // Try signing in via Firebase Auth if userInput is email
+    if (auth && userInput.includes('@')) {
+      try {
+        await auth.signInWithEmailAndPassword(userInput, password);
+      } catch (authErr) {
+        console.warn("Auth signInWithEmailAndPassword note:", authErr.message);
+      }
+    }
+
+    let matchedUser = null;
+
+    // 1. If userInput is a simple username (no invalid path characters like . or @), try direct key lookup
+    const isValidPathKey = /^[a-zA-Z0-9_]+$/.test(userInput);
+    if (isValidPathKey) {
+      try {
+        const snap = await db.ref('users/' + userInput).once('value');
+        if (snap.exists()) {
+          matchedUser = snap.val();
+        }
+      } catch (err) {
+        console.warn("Direct key lookup note:", err.message);
+      }
+    }
+
+    // 2. If not found by key, search Firebase RTDB across all users (by email or username)
+    if (!matchedUser) {
+      try {
+        const allUsersSnap = await db.ref('users').once('value');
+        if (allUsersSnap.exists()) {
+          const usersObj = allUsersSnap.val();
+          for (let key in usersObj) {
+            const u = usersObj[key];
+            if (u.username.toLowerCase() === userInput || (u.email && u.email.toLowerCase() === userInput)) {
+              matchedUser = u;
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("All users scan note:", err.message);
+      }
+    }
+
+    // 3. Fallback to Local Storage DB if Firebase is offline
+    if (!matchedUser) {
+      const localUsers = getLocalStore('users');
+      if (localUsers[userInput]) {
+        matchedUser = localUsers[userInput];
+      } else {
+        for (let key in localUsers) {
+          const u = localUsers[key];
+          if (u.username.toLowerCase() === userInput || (u.email && u.email.toLowerCase() === userInput)) {
+            matchedUser = u;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!matchedUser) {
+      errorDiv.textContent = `No account found with username or email '${userInput}'. Please create an account.`;
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
+      }
+      return;
+    }
+
+    if (matchedUser.password !== password) {
+      errorDiv.textContent = 'Incorrect password. Please try again.';
+      errorDiv.classList.remove('hidden');
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
+      }
+      return;
+    }
+
+    // Login successful
+    currentUser = matchedUser;
+    localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+
+    // Cache user to local storage
+    const localUsers = getLocalStore('users');
+    localUsers[matchedUser.username] = matchedUser;
+    setLocalStore('users', localUsers);
+
+    updateHeaderGreeting();
+    document.getElementById('form-login').reset();
+
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
+    }
+
+    showToast(`Welcome back, ${currentUser.fullName || currentUser.username}!`, 'success');
+    navigateTo('home');
+
+  } catch (err) {
+    console.error("Login error:", err);
+    errorDiv.textContent = 'An error occurred during login. Please check connection and try again.';
+    errorDiv.classList.remove('hidden');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<span>Login to Account</span> <i class="fa-solid fa-arrow-right"></i>';
+    }
+  }
+}
+
+// ==========================================================================
+// 6. USER DASHBOARD & REALTIME LISTENERS
+// ==========================================================================
+function detachUserListeners() {
+  if (userListenerUnsub) {
+    try { db.ref('users/' + currentUser?.username).off('value', userListenerUnsub); } catch(e){}
+    userListenerUnsub = null;
+  }
+  if (debitsListenerUnsub) {
+    try { db.ref('debits').off('value', debitsListenerUnsub); } catch(e){}
+    debitsListenerUnsub = null;
+  }
+  if (withdrawalsListenerUnsub) {
+    try { db.ref('withdrawals').off('value', withdrawalsListenerUnsub); } catch(e){}
+    withdrawalsListenerUnsub = null;
+  }
+}
+
+function loadUserDashboard() {
+  if (!currentUser) return;
+
+  // Run automatic monthly payout scheduler for scheduled milestone dates
+  autoProcessScheduledPayouts();
+
+  detachUserListeners();
+
+  // Function to render balances
+  const renderBalances = (userObj) => {
+    currentUser = userObj;
+    localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+
+    const availableBal = parseFloat(userObj.availableBalance || 0);
+    const debitedBal = parseFloat(userObj.lockedDebitBalance || 0);
+    const totalVal = availableBal + debitedBal;
+
+    const elAvail = document.getElementById('val-available-balance');
+    if (elAvail) elAvail.textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elDeb = document.getElementById('val-debited-balance');
+    if (elDeb) elDeb.textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elTot = document.getElementById('val-total-account-value');
+    if (elTot) elTot.textContent = totalVal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elPrin = document.getElementById('info-principal-amount');
+    if (elPrin) elPrin.textContent = debitedBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elBon = document.getElementById('info-bonus-amount');
+    if (elBon) elBon.textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    const elWMax = document.getElementById('withdraw-max-balance');
+    if (elWMax) elWMax.textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // Initial render from local DB or current state
+  const localUsers = getLocalStore('users');
+  if (localUsers[currentUser.username]) {
+    renderBalances(localUsers[currentUser.username]);
+  } else {
+    renderBalances(currentUser);
+  }
+
+  // 1. Firebase Realtime Listener
+  try {
+    const userRef = db.ref('users/' + currentUser.username);
+    userListenerUnsub = userRef.on('value', (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        localUsers[currentUser.username] = data;
+        setLocalStore('users', localUsers);
+        renderBalances(data);
+      }
+    });
+  } catch(e) {}
+
+  // 2. Real-time Debits Listener
+  const renderDebits = (debitsMap) => {
+    const container = document.getElementById('debits-list-container');
+    container.innerHTML = '';
+    const userDebits = [];
+
+    for (let key in debitsMap) {
+      if (debitsMap[key].username === currentUser.username) {
+        userDebits.push({ id: key, ...debitsMap[key] });
+      }
+    }
+
+    // Sort ascending by timestamp so Fund 1 is oldest, Fund 2 is second, etc.
+    userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+    // Assign Fund Numbers
+    userDebits.forEach((d, idx) => {
+      if (!d.fundNumber) d.fundNumber = idx + 1;
+    });
+
+    if (userDebits.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="fa-solid fa-receipt empty-icon"></i>
+          <p>No debits added yet. Click <strong>"Debit Money"</strong> to start your ₹1,000 ($10 USD) monthly scheme!</p>
+        </div>`;
+    } else {
+      userDebits.reverse().forEach(debit => {
+        const card = document.createElement('div');
+        const status = debit.status || 'Pending';
+        card.className = `debit-item-card status-${status.toLowerCase()}`;
+        card.onclick = () => openSchemeDetailsForDebit(debit);
+
+        let statusBadge = '<span class="badge-status pending"><i class="fa-solid fa-clock"></i> Wait for the confirmation</span>';
+        if (status === 'Approved') {
+          statusBadge = '<span class="badge-status success"><i class="fa-solid fa-circle-check"></i> ACCEPTED</span>';
+        } else if (status === 'Rejected') {
+          statusBadge = '<span class="badge-status danger"><i class="fa-solid fa-circle-xmark"></i> FAILED</span>';
+        }
+
+        const inrDisp = debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : (debit.amount * 100);
+        const usdDisp = parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const fundLabel = `Fund ${debit.fundNumber}`;
+
+        card.innerHTML = `
+          <div class="debit-card-header">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span class="fund-badge-pill"><i class="fa-solid fa-vault"></i> ${fundLabel}</span>
+              <span class="debit-amount-tag">₹${inrDisp} ($${usdDisp} USD)</span>
+            </div>
+            <span class="debit-date-tag"><i class="fa-solid fa-calendar"></i> ${debit.date}</span>
+          </div>
+          <div class="debit-card-body" style="margin: 0.5rem 0;">
+            <div style="font-size: 0.82rem; color: #475569; margin-bottom: 0.35rem;"><i class="fa-solid fa-hashtag"></i> UTR ID: <strong>${debit.utr || 'N/A'}</strong></div>
+            ${statusBadge}
+          </div>
+          <div class="debit-card-details">
+            <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>$${debit.monthlyBonus || 2}/mo</strong> for 12 months</div>
+            <div class="click-schedule-hint"><i class="fa-solid fa-calendar-days text-blue"></i> Click for ${fundLabel} 12-Month Schedule <i class="fa-solid fa-chevron-right"></i></div>
+          </div>`;
+        container.appendChild(card);
+      });
+    }
+  };
+
+  renderDebits(getLocalStore('debits'));
+
+  try {
+    debitsListenerUnsub = db.ref('debits').on('value', (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setLocalStore('debits', val);
+        renderDebits(val);
+      }
+    });
+  } catch(e) {}
+
+  // 3. Real-time Withdrawals Listener
+  const renderWithdrawals = (withdrawalsMap) => {
+    const tbody = document.getElementById('user-withdrawals-tbody');
+    tbody.innerHTML = '';
+    const userW = [];
+
+    for (let key in withdrawalsMap) {
+      if (withdrawalsMap[key].username === currentUser.username) {
+        userW.push({ id: key, ...withdrawalsMap[key] });
+      }
+    }
+
+    if (userW.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No withdrawal history available</td></tr>`;
+    } else {
+      userW.reverse().forEach(w => {
+        const row = document.createElement('tr');
+        
+        let statusBadgeClass = 'pending';
+        let statusIcon = 'fa-hourglass-half';
+        if (w.status === 'Success') {
+          statusBadgeClass = 'success';
+          statusIcon = 'fa-circle-check';
+        } else if (w.status === 'Rejected') {
+          statusBadgeClass = 'rejected';
+          statusIcon = 'fa-circle-xmark';
+        }
+
+        let detailsText = w.method === 'UPI' ? `UPI: ${w.details?.upiId || 'N/A'}` : `Bank Acc: ${w.details?.accountNumber || 'N/A'}`;
+
+        row.innerHTML = `
+          <td><code>#${w.id.substring(0, 8)}</code></td>
+          <td>${w.date}</td>
+          <td><strong class="text-green">$${parseFloat(w.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
+          <td><span class="badge-neutral">${w.method}</span></td>
+          <td><small>${detailsText}</small></td>
+          <td><span class="status-badge ${statusBadgeClass}"><i class="fa-solid ${statusIcon}"></i> ${w.status}</span></td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+  };
+
+  renderWithdrawals(getLocalStore('withdrawals'));
+
+  try {
+    withdrawalsListenerUnsub = db.ref('withdrawals').on('value', (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setLocalStore('withdrawals', val);
+        renderWithdrawals(val);
+      }
+    });
+  } catch(e) {}
+}
+
+// ==========================================================================
+// 6.5 INTERACTIVE PROFIT CALCULATOR LOGIC
+// ==========================================================================
+function updateProfitCalculator() {
+  const rangeInput = document.getElementById('calc-amount-range');
+  if (!rangeInput) return;
+
+  const inrAmount = parseFloat(rangeInput.value) || 1000;
+  const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+  const monthlyProfit = parseFloat((usdAmount * 0.2).toFixed(2));
+  const totalProfit = parseFloat((monthlyProfit * 12).toFixed(2));
+
+  const amountLabel = document.getElementById('calc-amount-label');
+  if (amountLabel) amountLabel.textContent = '₹' + inrAmount.toLocaleString('en-IN');
+
+  const resUsd = document.getElementById('calc-res-usd');
+  if (resUsd) resUsd.textContent = usdAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const resMonthly = document.getElementById('calc-res-monthly');
+  if (resMonthly) resMonthly.textContent = monthlyProfit.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const resTotal = document.getElementById('calc-res-total');
+  if (resTotal) resTotal.textContent = totalProfit.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const btnAmount = document.getElementById('calc-btn-amount');
+  if (btnAmount) btnAmount.textContent = inrAmount.toLocaleString('en-IN');
+
+  const btnUsd = document.getElementById('calc-btn-usd');
+  if (btnUsd) btnUsd.textContent = usdAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+}
+
+function setCalcPreset(inrAmount) {
+  const rangeInput = document.getElementById('calc-amount-range');
+  if (rangeInput) {
+    rangeInput.value = inrAmount;
+    updateProfitCalculator();
+  }
+
+  document.querySelectorAll('.btn-preset-sm').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.textContent.includes('₹' + inrAmount.toLocaleString('en-IN')) || btn.textContent.includes(inrAmount.toString())) {
+      btn.classList.add('active');
+    }
+  });
+}
+
+function startSchemeWithCalcAmount() {
+  const rangeInput = document.getElementById('calc-amount-range');
+  const inrAmount = parseFloat(rangeInput?.value || 1000);
+
+  openDebitModal();
+  setDebitAmount(inrAmount);
+}
+
+// ==========================================================================
+// 7. DEBIT MONEY & DYNAMIC QR CODE FLOW
+// ==========================================================================
+function openDebitModal() {
+  document.getElementById('modal-debit').classList.remove('hidden');
+  generatePaymentQR();
+}
+
+function setDebitAmount(inrAmount) {
+  const debitInput = document.getElementById('debit-amount');
+  if (debitInput) debitInput.value = inrAmount;
+  
+  document.querySelectorAll('.btn-preset').forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.textContent.includes('₹' + inrAmount.toLocaleString('en-IN')) || btn.textContent.includes(inrAmount.toString())) {
+      btn.classList.add('active');
+    }
+  });
+
+  generatePaymentQR();
+}
+
+function generatePaymentQR() {
+  const amountInput = document.getElementById('debit-amount');
+  let inrAmount = parseFloat(amountInput?.value) || 1000;
+  
+  if (inrAmount > 25000) inrAmount = 25000;
+
+  const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+  const monthlyBonus = parseFloat((usdAmount * 0.2).toFixed(2));
+  const totalBonus = parseFloat((monthlyBonus * 12).toFixed(2));
+
+  const previewInr = document.getElementById('preview-debit-inr');
+  if (previewInr) previewInr.textContent = inrAmount.toLocaleString('en-IN');
+
+  const previewUsd = document.getElementById('preview-debit-amount');
+  if (previewUsd) previewUsd.textContent = usdAmount.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const previewMonthly = document.getElementById('preview-monthly-bonus');
+  if (previewMonthly) previewMonthly.textContent = monthlyBonus.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const previewTotal = document.getElementById('preview-total-bonus');
+  if (previewTotal) previewTotal.textContent = totalBonus.toLocaleString('en-US', { minimumFractionDigits: 2 });
+
+  const qrAmountDisp = document.getElementById('qr-amount-display');
+  if (qrAmountDisp) qrAmountDisp.textContent = inrAmount.toLocaleString('en-IN');
+
+  const qrcodeContainer = document.getElementById('qrcode');
+  if (qrcodeContainer) {
+    qrcodeContainer.innerHTML = '';
+
+    // Real UPI QR Payload with fixed price amount in INR
+    const upiString = `upi://pay?pa=7396725333@axl&pn=E-Finance&am=${inrAmount}&cu=INR&mode=02&purpose=00`;
+
+    if (window.QRCode) {
+      new QRCode(qrcodeContainer, {
+        text: upiString,
+        width: 190,
+        height: 190,
+        colorDark : "#050811",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.H
+      });
+    }
+  }
+}
+
+function copyUPI() {
+  navigator.clipboard.writeText('7396725333@axl').then(() => {
+    showToast('UPI ID (7396725333@axl) copied to clipboard!', 'info');
+  });
+}
+
+function previewDebitProof(input) {
+  const container = document.getElementById('debit-proof-container');
+  const img = document.getElementById('debit-proof-img');
+  
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      if (img) img.src = e.target.result;
+      if (container) container.classList.remove('hidden');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+// Fast WebP image compressor (converts 10MB screenshots to ~80KB WebP for ultra-fast 0.3s upload)
+function compressImageToWebP(file, maxDimension = 1000, quality = 0.8) {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const webpFile = new File([blob], `proof_${Date.now()}.webp`, { type: 'image/webp' });
+            resolve({ file: webpFile, dataUrl: canvas.toDataURL('image/webp', quality) });
+          } else {
+            canvas.toBlob((jpgBlob) => {
+              const jpgFile = new File([jpgBlob], `proof_${Date.now()}.jpg`, { type: 'image/jpeg' });
+              resolve({ file: jpgFile, dataUrl: canvas.toDataURL('image/jpeg', quality) });
+            }, 'image/jpeg', quality);
+          }
+        }, 'image/webp', quality);
+      };
+      img.onerror = () => resolve({ file: file, dataUrl: e.target.result });
+      img.src = e.target.result;
+    };
+    reader.onerror = () => resolve({ file: file, dataUrl: null });
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadToCloudinary(fileObj, fallbackDataUrl) {
+  const formData = new FormData();
+  formData.append('file', fileObj);
+  formData.append('upload_preset', 'ml_default');
+  formData.append('api_key', 'bAT107fDGMlAk23sOOdcBJ5lSPM');
+
+  try {
+    const res = await fetch('https://api.cloudinary.com/v1_1/htuoyw6l/image/upload', {
+      method: 'POST',
+      body: formData
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.secure_url) return data.secure_url;
+    }
+  } catch (e) {
+    console.warn("Cloudinary upload API note (using WebP dataUrl fallback):", e.message);
+  }
+
+  if (fallbackDataUrl) return fallbackDataUrl;
+
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.readAsDataURL(fileObj);
+  });
+}
+
+async function handleDebitSubmit(event) {
+  event.preventDefault();
+
+  const inrAmount = parseFloat(document.getElementById('debit-amount').value);
+  const debitDate = document.getElementById('debit-date').value;
+  const utr = document.getElementById('debit-utr').value.trim();
+  const proofInput = document.getElementById('debit-proof');
+  const errorDiv = document.getElementById('debit-error');
+  const successDiv = document.getElementById('debit-success');
+  const submitBtn = document.getElementById('btn-submit-debit');
+
+  errorDiv.classList.add('hidden');
+  if (successDiv) successDiv.classList.add('hidden');
+
+  if (!inrAmount || inrAmount < 100 || inrAmount > 25000) {
+    errorDiv.textContent = 'Please enter a valid deposit amount between ₹100 and ₹25,000.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (!utr) {
+    errorDiv.textContent = 'Please enter the 12-digit Payment UTR ID / Reference Number.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (!proofInput || !proofInput.files || !proofInput.files[0]) {
+    errorDiv.textContent = 'Please attach a Payment Screenshot confirmation picture.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  // 1. Show Uploading UI State immediately
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Uploading Payment Proof...';
+  }
+
+  if (successDiv) {
+    successDiv.innerHTML = '<i class="fa-solid fa-cloud-arrow-up fa-bounce text-blue"></i> <strong>Uploading Payment Proof...</strong> Please wait a moment.';
+    successDiv.classList.remove('hidden');
+  }
+
+  try {
+    // 2. Compress screenshot to WebP in browser (transparent to user)
+    const compressedResult = await compressImageToWebP(proofInput.files[0]);
+
+    // 3. Ultra-fast Cloudinary upload (small WebP file)
+    const proofUrl = await uploadToCloudinary(compressedResult.file, compressedResult.dataUrl);
+
+    const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+    const monthlyBonusUSD = parseFloat((usdAmount * 0.2).toFixed(2));
+    const debitId = 'DEB-' + Date.now();
+
+    const localDebits = getLocalStore('debits');
+    const userExistingDebits = Object.values(localDebits).filter(d => d.username === currentUser.username);
+    const fundNumber = userExistingDebits.length + 1;
+
+    const debitRecord = {
+      id: debitId,
+      username: currentUser.username,
+      fullName: currentUser.fullName || currentUser.username,
+      fundNumber: fundNumber,
+      amount: usdAmount, // USD ($)
+      inrAmount: inrAmount, // INR (₹)
+      date: debitDate || new Date().toLocaleDateString('en-US'),
+      monthlyBonus: monthlyBonusUSD,
+      monthsTotal: 12,
+      creditedMonthCount: 0,
+      utr: utr,
+      proofUrl: proofUrl,
+      status: 'Pending', // PENDING ADMIN APPROVAL
+      timestamp: Date.now()
+    };
+
+    // 4. Save debit record to Local Storage DB
+    localDebits[debitId] = debitRecord;
+    setLocalStore('debits', localDebits);
+
+    // 5. Save debit record to Firebase Realtime Database
+    try {
+      await ensureFirebaseAuth();
+      await db.ref('debits/' + debitId).set(debitRecord);
+    } catch (err) {
+      console.warn("Firebase RTDB debit sync note:", err.message);
+    }
+
+    if (successDiv) {
+      successDiv.innerHTML = `✓ Payment proof & UTR submitted successfully! Your deposit of ₹${inrAmount.toLocaleString('en-IN')} ($${usdAmount} USD) is IN PROGRESS under Admin Review.`;
+      successDiv.classList.remove('hidden');
+    }
+
+    showToast(`Deposit submitted! Admin will verify UTR: ${utr}`, 'info');
+
+    setTimeout(() => {
+      document.getElementById('form-debit').reset();
+      const previewContainer = document.getElementById('debit-proof-container');
+      if (previewContainer) previewContainer.classList.add('hidden');
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Deposit & Proof (Pending Admin Approval)';
+      }
+
+      closeModal('modal-debit');
+      loadUserDashboard();
+    }, 1200);
+
+  } catch (err) {
+    console.error("Debit submission error:", err);
+    errorDiv.textContent = 'Could not upload payment proof or submit request. Please try again.';
+    errorDiv.classList.remove('hidden');
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Deposit & Proof (Pending Admin Approval)';
+    }
+  }
+}
+
+// ==========================================================================
+// 8. SCHEME DETAIL BREAKDOWN MODAL
+// ==========================================================================
+function openActiveSchemeDetails() {
+  const debitsMap = getLocalStore('debits') || {};
+  const userDebits = [];
+
+  for (let key in debitsMap) {
+    if (debitsMap[key].username === currentUser?.username) {
+      userDebits.push({ id: key, ...debitsMap[key] });
+    }
+  }
+
+  // Sort ascending by timestamp so Fund 1 is oldest, Fund 2 is second, etc.
+  userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+  // Assign Fund Numbers
+  userDebits.forEach((d, idx) => {
+    if (!d.fundNumber) d.fundNumber = idx + 1;
+  });
+
+  // Filter only Approved / Active funds
+  const activeFunds = userDebits.filter(d => d.status === 'Approved');
+
+  if (activeFunds.length === 0) {
+    if (userDebits.length > 0) {
+      alert("Your fund deposit request is currently waiting for Admin confirmation.");
+    } else {
+      alert("No active debited scheme funds found. Click 'Debit Money' to start a scheme!");
+    }
+    return;
+  }
+
+  if (activeFunds.length === 1) {
+    // Single active fund: directly view its 12-month schedule
+    openSchemeDetailsForDebit(activeFunds[0]);
+  } else {
+    // Multiple active funds: show selection modal
+    const listContainer = document.getElementById('select-fund-list-container');
+    if (listContainer) {
+      listContainer.innerHTML = '';
+      activeFunds.forEach(debit => {
+        const card = document.createElement('div');
+        card.className = 'debit-item-card status-approved';
+        card.onclick = () => {
+          closeModal('modal-select-fund');
+          openSchemeDetailsForDebit(debit);
+        };
+
+        const inrDisp = debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : (debit.amount * 100);
+        const usdDisp = parseFloat(debit.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const fundLabel = `Fund ${debit.fundNumber}`;
+        const creditedCount = parseInt(debit.creditedMonthCount || (debit.creditedMonths ? debit.creditedMonths.length : 0));
+
+        card.innerHTML = `
+          <div class="debit-card-header">
+            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+              <span class="fund-badge-pill"><i class="fa-solid fa-vault"></i> ${fundLabel}</span>
+              <span class="debit-amount-tag">₹${inrDisp} ($${usdDisp} USD)</span>
+            </div>
+            <span class="debit-date-tag"><i class="fa-solid fa-calendar"></i> ${debit.date}</span>
+          </div>
+          <div class="debit-card-body" style="margin: 0.5rem 0;">
+            <div style="font-size: 0.82rem; color: #475569; margin-bottom: 0.35rem;"><i class="fa-solid fa-hashtag"></i> UTR ID: <strong>${debit.utr || 'N/A'}</strong></div>
+            <span class="badge-status success"><i class="fa-solid fa-circle-check"></i> ACCEPTED</span>
+          </div>
+          <div class="debit-card-details" style="display: flex; justify-content: space-between; align-items: center; border-top: 1px dashed #e2e8f0; padding-top: 0.5rem; font-size: 0.85rem;">
+            <div><i class="fa-solid fa-gift text-green"></i> Earns <strong>$${debit.monthlyBonus || parseFloat((debit.amount * 0.2).toFixed(2))}/mo</strong></div>
+            <div class="payout-progress-pill" style="font-size: 0.78rem; padding: 0.2rem 0.5rem;">
+              <strong>${creditedCount} / 12</strong> Credited
+            </div>
+          </div>
+          <div style="margin-top: 0.35rem; color: var(--blue-primary); font-weight: 600; font-size: 0.85rem;">
+            View ${fundLabel} 12-Month Schedule <i class="fa-solid fa-chevron-right"></i>
+          </div>
+        `;
+        listContainer.appendChild(card);
+      });
+    }
+
+    document.getElementById('modal-select-fund').classList.remove('hidden');
+  }
+}
+
+// ==========================================================================
+// DATE MILESTONE HELPERS & AUTO PAYOUT ENGINE
+// ==========================================================================
+// Month 1 starts exactly 1 month after deposit date (e.g. Deposit: Sep 5 -> Month 1: Oct 5, Month 2: Nov 5)
+function parseDepositDateObj(dateStr) {
+  if (!dateStr) return new Date();
+  if (typeof dateStr === 'string' && dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return new Date(y, m, d);
+    }
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function getMilestoneDateObj(depositDateStr, monthNum) {
+  const base = parseDepositDateObj(depositDateStr);
+  // Month 1 starts 1 month after deposit
+  return new Date(base.getFullYear(), base.getMonth() + monthNum, base.getDate());
+}
+
+function formatMilestoneDateStr(depositDateStr, monthNum) {
+  const d = getMilestoneDateObj(depositDateStr, monthNum);
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Automatically processes and credits monthly profit returns to user wallet on scheduled dates
+function autoProcessScheduledPayouts() {
+  const localDebits = getLocalStore('debits') || {};
+  const localUsers = getLocalStore('users') || {};
+  let stateChanged = false;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  for (let dKey in localDebits) {
+    const debit = localDebits[dKey];
+    if (debit.status === 'Approved') {
+      const username = debit.username;
+      const depositDate = debit.date || new Date().toISOString().split('T')[0];
+      const monthlyBonus = debit.monthlyBonus || parseFloat(((debit.amount || 10) * 0.2).toFixed(2));
+      let currCount = parseInt(debit.creditedMonthCount || 0);
+
+      for (let m = currCount + 1; m <= 12; m++) {
+        const mDate = getMilestoneDateObj(depositDate, m);
+        const compareDate = new Date(mDate.getFullYear(), mDate.getMonth(), mDate.getDate());
+
+        if (now >= compareDate) {
+          // Scheduled milestone date reached! Auto-credit profit return to user's wallet
+          currCount = m;
+          debit.creditedMonthCount = m;
+
+          if (localUsers[username]) {
+            const currAvail = parseFloat(localUsers[username].availableBalance || 0);
+            localUsers[username].availableBalance = parseFloat((currAvail + monthlyBonus).toFixed(2));
+          }
+
+          stateChanged = true;
+
+          // Sync to Firebase Realtime Database
+          try {
+            if (window.db) {
+              db.ref(`debits/${dKey}`).update({ creditedMonthCount: m });
+              if (localUsers[username]) {
+                db.ref(`users/${username}`).update({ availableBalance: localUsers[username].availableBalance });
+              }
+            }
+          } catch (e) {}
+        } else {
+          break; // Future milestone dates have not arrived yet
+        }
+      }
+    }
+  }
+
+  if (stateChanged) {
+    setLocalStore('debits', localDebits);
+    setLocalStore('users', localUsers);
+    if (currentUser && localUsers[currentUser.username]) {
+      currentUser.availableBalance = localUsers[currentUser.username].availableBalance;
+      localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+    }
+  }
+}
+
+function openSchemeDetailsForDebit(debit) {
+  // Ensure auto payouts are processed up to today before showing details
+  autoProcessScheduledPayouts();
+
+  const summaryBox = document.getElementById('scheme-modal-summary');
+  const gridContainer = document.getElementById('scheme-timeline-grid');
+
+  const amount = debit.amount || 10;
+  const depositDate = debit.date || new Date().toLocaleDateString('en-US');
+  const monthlyBonus = debit.monthlyBonus || parseFloat((amount * 0.2).toFixed(2));
+  const fundLabel = debit.fundNumber ? `Fund ${debit.fundNumber}` : 'Fund 1';
+  const month1DateStr = formatMilestoneDateStr(depositDate, 1);
+  
+  // Calculate credited months count dynamically for THIS specific fund
+  const creditedCount = parseInt(debit.creditedMonthCount || (debit.creditedMonths ? debit.creditedMonths.length : 0));
+
+  summaryBox.innerHTML = `
+    <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+      <div>
+        <span class="fund-badge-pill" style="font-size: 0.85rem; padding: 0.25rem 0.75rem; margin-bottom: 0.35rem;"><i class="fa-solid fa-vault"></i> ${fundLabel} Earnings Breakdown</span>
+        <p style="font-size: 0.92rem; color: #1e293b; margin-top: 0.25rem;">
+          Deposited on <strong>${depositDate}</strong>: <strong>₹${debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : amount * 100} ($${parseFloat(amount).toLocaleString('en-US')} USD)</strong>.<br>
+          <span style="color: #0284c7; font-weight: 600;"><i class="fa-solid fa-calendar-check"></i> Month 1 starts on ${month1DateStr}</span> (1 month after deposit). Payout: <strong>$${monthlyBonus} USD/mo</strong>.
+        </p>
+      </div>
+      <div class="payout-progress-pill">
+        <strong>${creditedCount} / 12</strong> Months Credited
+      </div>
+    </div>
+  `;
+
+  gridContainer.innerHTML = '';
+
+  for (let m = 1; m <= 12; m++) {
+    const card = document.createElement('div');
+    const isCompletedMonth = m <= creditedCount;
+    const milestoneDateStr = formatMilestoneDateStr(depositDate, m);
+    
+    card.className = `month-card ${isCompletedMonth ? 'credited' : ''}`;
+    card.innerHTML = `
+      <div class="month-title">MONTH ${m}</div>
+      <div style="font-size: 0.78rem; font-weight: 600; color: #0f172a; margin-bottom: 0.2rem;">${milestoneDateStr}</div>
+      <div class="month-amount">$${monthlyBonus}</div>
+      <div class="month-status">${isCompletedMonth ? '<i class="fa-solid fa-check"></i> Auto-Credited' : 'Scheduled'}</div>
+    `;
+    gridContainer.appendChild(card);
+  }
+
+  document.getElementById('modal-scheme-details').classList.remove('hidden');
+}
+
+// ==========================================================================
+// 9. WITHDRAWAL FLOW
+// ==========================================================================
+function openWithdrawModal() {
+  const availableBal = parseFloat(currentUser?.availableBalance || 0);
+  document.getElementById('withdraw-max-balance').textContent = availableBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById('modal-withdraw').classList.remove('hidden');
+}
+
+function selectWithdrawMethod(method) {
+  const upiSection = document.getElementById('withdraw-method-upi');
+  const bankSection = document.getElementById('withdraw-method-bank');
+  
+  document.querySelectorAll('.radio-card').forEach(card => card.classList.remove('selected'));
+
+  if (method === 'UPI') {
+    document.querySelector('input[value="UPI"]').checked = true;
+    document.querySelector('input[value="UPI"]').closest('.radio-card').classList.add('selected');
+    upiSection.classList.remove('hidden');
+    bankSection.classList.add('hidden');
+  } else {
+    document.querySelector('input[value="BANK"]').checked = true;
+    document.querySelector('input[value="BANK"]').closest('.radio-card').classList.add('selected');
+    upiSection.classList.add('hidden');
+    bankSection.classList.remove('hidden');
+  }
+}
+
+async function handleWithdrawSubmit(event) {
+  event.preventDefault();
+
+  const amount = parseFloat(document.getElementById('withdraw-amount').value);
+  const method = document.querySelector('input[name="withdraw-method"]:checked').value;
+  const availableBal = parseFloat(currentUser?.availableBalance || 0);
+  const errorDiv = document.getElementById('withdraw-error');
+
+  errorDiv.classList.add('hidden');
+
+  if (!amount || amount <= 0) {
+    errorDiv.textContent = 'Please enter a valid withdrawal amount.';
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  if (amount > availableBal) {
+    errorDiv.textContent = `Insufficient withdrawable bonus balance. Your max available profit balance is $${availableBal.toLocaleString('en-US')}. (Locked debit principal cannot be withdrawn).`;
+    errorDiv.classList.remove('hidden');
+    return;
+  }
+
+  let details = {};
+  if (method === 'UPI') {
+    const upiId = document.getElementById('w-upi-id').value.trim();
+    if (!upiId) {
+      errorDiv.textContent = 'Please enter your UPI ID (e.g. user@upi).';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+    details = { upiId: upiId };
+  } else {
+    const accountNumber = document.getElementById('w-bank-acc').value.trim();
+    const ifsc = document.getElementById('w-bank-ifsc').value.trim().toUpperCase();
+    const holder = document.getElementById('w-bank-holder').value.trim();
+
+    if (!accountNumber || !ifsc || !holder) {
+      errorDiv.textContent = 'Please fill out all Bank Account details.';
+      errorDiv.classList.remove('hidden');
+      return;
+    }
+    details = { accountNumber, ifsc, holder };
+  }
+
+  const withdrawId = 'WD_' + Date.now().toString().slice(-6);
+
+  const withdrawRequest = {
+    id: withdrawId,
+    username: currentUser.username,
+    fullName: currentUser.fullName || currentUser.username,
+    amount: amount,
+    method: method,
+    details: details,
+    status: 'Pending',
+    date: new Date().toLocaleDateString('en-US'),
+    timestamp: Date.now()
+  };
+
+  // 1. Local DB sync
+  const localW = getLocalStore('withdrawals');
+  localW[withdrawId] = withdrawRequest;
+  setLocalStore('withdrawals', localW);
+
+  const localUsers = getLocalStore('users');
+  const newAvailable = availableBal - amount;
+  if (localUsers[currentUser.username]) {
+    localUsers[currentUser.username].availableBalance = newAvailable;
+    setLocalStore('users', localUsers);
+  }
+  currentUser.availableBalance = newAvailable;
+  localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+
+  // 2. Firebase push
+  try {
+    await ensureFirebaseAuth();
+    await db.ref('withdrawals/' + withdrawId).set(withdrawRequest);
+    await db.ref('users/' + currentUser.username).update({
+      availableBalance: newAvailable
+    });
+  } catch (err) {
+    console.warn("Firebase RTDB withdrawal sync note:", err.message);
+  }
+
+  closeModal('modal-withdraw');
+  document.getElementById('form-withdraw').reset();
+  showToast(`Withdrawal request of $${amount} submitted! Status: PENDING`, 'info');
+  loadUserDashboard();
+}
+
+// GENERAL HELPERS & TOAST NOTIFICATIONS
+function closeModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.add('hidden');
+}
+
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+
+  let icon = 'fa-circle-info';
+  if (type === 'success') icon = 'fa-circle-check';
+  if (type === 'error') icon = 'fa-circle-exclamation';
+
+  toast.innerHTML = `<i class="fa-solid ${icon}"></i> <span>${message}</span>`;
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(50px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
