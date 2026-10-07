@@ -577,6 +577,9 @@ function detachUserListeners() {
 function loadUserDashboard() {
   if (!currentUser) return;
 
+  // Run automatic monthly payout scheduler for scheduled milestone dates
+  autoProcessScheduledPayouts();
+
   detachUserListeners();
 
   // Function to render balances
@@ -866,13 +869,14 @@ function generatePaymentQR() {
   if (qrcodeContainer) {
     qrcodeContainer.innerHTML = '';
 
-    const upiString = `upi://pay?pa=easyfinance@upi&pn=EasyFinance&am=${inrAmount}&cu=INR`;
+    // Real PhonePe UPI QR Payload with fixed price amount in INR
+    const upiString = `upi://pay?pa=7396725333@axl&pn=KARRI%20KARTHIK%20SIVAREDDY&am=${inrAmount}&cu=INR&mode=02&purpose=00`;
 
     if (window.QRCode) {
       new QRCode(qrcodeContainer, {
         text: upiString,
-        width: 180,
-        height: 180,
+        width: 190,
+        height: 190,
         colorDark : "#050811",
         colorLight : "#ffffff",
         correctLevel : QRCode.CorrectLevel.H
@@ -882,8 +886,8 @@ function generatePaymentQR() {
 }
 
 function copyUPI() {
-  navigator.clipboard.writeText('easyfinance@upi').then(() => {
-    showToast('UPI ID copied to clipboard!', 'info');
+  navigator.clipboard.writeText('7396725333@axl').then(() => {
+    showToast('UPI ID (7396725333@axl) copied to clipboard!', 'info');
   });
 }
 
@@ -1178,14 +1182,106 @@ function openActiveSchemeDetails() {
   }
 }
 
+// ==========================================================================
+// DATE MILESTONE HELPERS & AUTO PAYOUT ENGINE
+// ==========================================================================
+// Month 1 starts exactly 1 month after deposit date (e.g. Deposit: Sep 5 -> Month 1: Oct 5, Month 2: Nov 5)
+function parseDepositDateObj(dateStr) {
+  if (!dateStr) return new Date();
+  if (typeof dateStr === 'string' && dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return new Date(y, m, d);
+    }
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function getMilestoneDateObj(depositDateStr, monthNum) {
+  const base = parseDepositDateObj(depositDateStr);
+  // Month 1 starts 1 month after deposit
+  return new Date(base.getFullYear(), base.getMonth() + monthNum, base.getDate());
+}
+
+function formatMilestoneDateStr(depositDateStr, monthNum) {
+  const d = getMilestoneDateObj(depositDateStr, monthNum);
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// Automatically processes and credits monthly profit returns to user wallet on scheduled dates
+function autoProcessScheduledPayouts() {
+  const localDebits = getLocalStore('debits') || {};
+  const localUsers = getLocalStore('users') || {};
+  let stateChanged = false;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  for (let dKey in localDebits) {
+    const debit = localDebits[dKey];
+    if (debit.status === 'Approved') {
+      const username = debit.username;
+      const depositDate = debit.date || new Date().toISOString().split('T')[0];
+      const monthlyBonus = debit.monthlyBonus || parseFloat(((debit.amount || 10) * 0.2).toFixed(2));
+      let currCount = parseInt(debit.creditedMonthCount || 0);
+
+      for (let m = currCount + 1; m <= 12; m++) {
+        const mDate = getMilestoneDateObj(depositDate, m);
+        const compareDate = new Date(mDate.getFullYear(), mDate.getMonth(), mDate.getDate());
+
+        if (now >= compareDate) {
+          // Scheduled milestone date reached! Auto-credit profit return to user's wallet
+          currCount = m;
+          debit.creditedMonthCount = m;
+
+          if (localUsers[username]) {
+            const currAvail = parseFloat(localUsers[username].availableBalance || 0);
+            localUsers[username].availableBalance = parseFloat((currAvail + monthlyBonus).toFixed(2));
+          }
+
+          stateChanged = true;
+
+          // Sync to Firebase Realtime Database
+          try {
+            if (window.db) {
+              db.ref(`debits/${dKey}`).update({ creditedMonthCount: m });
+              if (localUsers[username]) {
+                db.ref(`users/${username}`).update({ availableBalance: localUsers[username].availableBalance });
+              }
+            }
+          } catch (e) {}
+        } else {
+          break; // Future milestone dates have not arrived yet
+        }
+      }
+    }
+  }
+
+  if (stateChanged) {
+    setLocalStore('debits', localDebits);
+    setLocalStore('users', localUsers);
+    if (currentUser && localUsers[currentUser.username]) {
+      currentUser.availableBalance = localUsers[currentUser.username].availableBalance;
+      localStorage.setItem('efinance_current_user', JSON.stringify(currentUser));
+    }
+  }
+}
+
 function openSchemeDetailsForDebit(debit) {
+  // Ensure auto payouts are processed up to today before showing details
+  autoProcessScheduledPayouts();
+
   const summaryBox = document.getElementById('scheme-modal-summary');
   const gridContainer = document.getElementById('scheme-timeline-grid');
 
   const amount = debit.amount || 10;
-  const date = debit.date || new Date().toLocaleDateString('en-US');
+  const depositDate = debit.date || new Date().toLocaleDateString('en-US');
   const monthlyBonus = debit.monthlyBonus || parseFloat((amount * 0.2).toFixed(2));
   const fundLabel = debit.fundNumber ? `Fund ${debit.fundNumber}` : 'Fund 1';
+  const month1DateStr = formatMilestoneDateStr(depositDate, 1);
   
   // Calculate credited months count dynamically for THIS specific fund
   const creditedCount = parseInt(debit.creditedMonthCount || (debit.creditedMonths ? debit.creditedMonths.length : 0));
@@ -1194,7 +1290,10 @@ function openSchemeDetailsForDebit(debit) {
     <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
       <div>
         <span class="fund-badge-pill" style="font-size: 0.85rem; padding: 0.25rem 0.75rem; margin-bottom: 0.35rem;"><i class="fa-solid fa-vault"></i> ${fundLabel} Earnings Breakdown</span>
-        <p style="font-size: 0.92rem; color: #1e293b; margin-top: 0.25rem;">Present on date <strong>${date}</strong> you debited <strong>₹${debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : amount * 100} ($${parseFloat(amount).toLocaleString('en-US')} USD)</strong>. Per month you get <strong>$${monthlyBonus} USD</strong> for 12 months.</p>
+        <p style="font-size: 0.92rem; color: #1e293b; margin-top: 0.25rem;">
+          Deposited on <strong>${depositDate}</strong>: <strong>₹${debit.inrAmount ? debit.inrAmount.toLocaleString('en-IN') : amount * 100} ($${parseFloat(amount).toLocaleString('en-US')} USD)</strong>.<br>
+          <span style="color: #0284c7; font-weight: 600;"><i class="fa-solid fa-calendar-check"></i> Month 1 starts on ${month1DateStr}</span> (1 month after deposit). Payout: <strong>$${monthlyBonus} USD/mo</strong>.
+        </p>
       </div>
       <div class="payout-progress-pill">
         <strong>${creditedCount} / 12</strong> Months Credited
@@ -1207,12 +1306,14 @@ function openSchemeDetailsForDebit(debit) {
   for (let m = 1; m <= 12; m++) {
     const card = document.createElement('div');
     const isCompletedMonth = m <= creditedCount;
+    const milestoneDateStr = formatMilestoneDateStr(depositDate, m);
     
     card.className = `month-card ${isCompletedMonth ? 'credited' : ''}`;
     card.innerHTML = `
       <div class="month-title">MONTH ${m}</div>
+      <div style="font-size: 0.78rem; font-weight: 600; color: #0f172a; margin-bottom: 0.2rem;">${milestoneDateStr}</div>
       <div class="month-amount">$${monthlyBonus}</div>
-      <div class="month-status">${isCompletedMonth ? '<i class="fa-solid fa-check"></i> Credited by Admin' : 'Scheduled'}</div>
+      <div class="month-status">${isCompletedMonth ? '<i class="fa-solid fa-check"></i> Auto-Credited' : 'Scheduled'}</div>
     `;
     gridContainer.appendChild(card);
   }

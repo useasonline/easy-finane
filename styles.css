@@ -2295,3 +2295,12 @@ input[type="range"] {
   font-size: 0.85rem;
   font-weight: 700;
 }
+
+.modal-card.wide {
+  max-width: 920px !important;
+  width: 95% !important;
+}
+
+.phonepe-brand-header {
+  box-shadow: 0 4px 14px rgba(95, 37, 159, 0.25);
+}

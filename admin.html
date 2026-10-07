@@ -180,27 +180,40 @@
         </div>
       </div>
 
-      <!-- SECTION: USER ACCOUNTS & CREDIT MONTHLY BONUS -->
+      <!-- SECTION: USER ACCOUNTS & FULL DATA LEDGER -->
       <div class="dash-section margin-top">
-        <div class="section-header">
-          <h3><i class="fa-solid fa-users-gear text-green"></i> Registered Accounts & Credit Monthly Bonus</h3>
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3><i class="fa-solid fa-users-gear text-green"></i> Registered User Accounts & Full Wallet Data</h3>
+            <p style="font-size: 0.82rem; color: #64748b; margin-top: 0.2rem;">Full deposit counts, dates money added, vault balances, and total wallet money</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button type="button" class="btn-primary" style="padding: 0.45rem 0.9rem; font-size: 0.85rem;" onclick="openAdminAddDepositModal()">
+              <i class="fa-solid fa-plus-circle"></i> Add Deposit at Selected Date
+            </button>
+            <button type="button" class="btn-secondary-sm" onclick="runAdminAutoPayoutCheck()">
+              <i class="fa-solid fa-rotate"></i> Sync Scheduled Auto-Payouts
+            </button>
+          </div>
         </div>
 
         <div class="table-responsive">
           <table class="data-table">
             <thead>
               <tr>
-                <th>Username</th>
-                <th>Full Name</th>
+                <th>Username & Profile</th>
                 <th>Contact</th>
-                <th>Total Debited (Principal)</th>
-                <th>Available Balance (Bonus)</th>
-                <th>Credit Bonus Actions</th>
+                <th>Total Deposits</th>
+                <th>Deposit Dates & Amounts</th>
+                <th>Locked Vault ($)</th>
+                <th>Available Balance ($)</th>
+                <th>Total Money in Wallet</th>
+                <th>Full User Data Actions</th>
               </tr>
             </thead>
             <tbody id="admin-users-tbody">
               <tr>
-                <td colspan="6" class="text-center py-4">Loading user accounts...</td>
+                <td colspan="8" class="text-center py-4">Loading user accounts...</td>
               </tr>
             </tbody>
           </table>
@@ -209,6 +222,120 @@
 
     </div>
   </section>
+
+  <!-- MODAL: ADMIN MANUAL ADD DEPOSIT AT DATE -->
+  <div id="modal-admin-add-deposit" class="modal-overlay hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-plus-circle text-blue"></i> Add User Deposit at Selected Date</h3>
+        <button class="modal-close" onclick="closeAdminModal('modal-admin-add-deposit')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="form-admin-add-deposit" onsubmit="handleAdminAddDepositSubmit(event)">
+          <div class="form-group">
+            <label for="admin-dep-user"><i class="fa-solid fa-user"></i> Select User Account <span class="required-star">*</span></label>
+            <select id="admin-dep-user" class="form-control" required style="width: 100%; padding: 0.6rem; border-radius: 8px; border: 1px solid #cbd5e1; font-weight: 600;">
+              <option value="">-- Select Target User --</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="admin-dep-inr"><i class="fa-solid fa-indian-rupee-sign"></i> Deposit Amount in INR (₹) <span class="required-star">*</span></label>
+            <input type="number" id="admin-dep-inr" placeholder="e.g. 1000 (₹1,000 INR = $10.00 USD)" min="100" max="100000" step="100" required value="1000" oninput="updateAdminDepUsdPreview(this.value)">
+            <small class="input-hint">Equivalent USD Vault Amount: <strong id="admin-dep-usd-prev">$10.00 USD</strong> | Earns <strong id="admin-dep-bonus-prev">$2.00/mo</strong> (20%)</small>
+          </div>
+
+          <div class="form-group">
+            <label for="admin-dep-date"><i class="fa-solid fa-calendar-days"></i> Deposit Date <span class="required-star">*</span></label>
+            <input type="date" id="admin-dep-date" required style="width: 100%; padding: 0.6rem; border-radius: 8px; border: 1px solid #cbd5e1;">
+            <small class="input-hint">Month 1 payout will start 1 month after this deposit date (e.g. Deposit 5 Sep -> Month 1 on 5 Oct)</small>
+          </div>
+
+          <div class="form-group">
+            <label for="admin-dep-utr"><i class="fa-solid fa-receipt"></i> UTR / Transaction Reference Note</label>
+            <input type="text" id="admin-dep-utr" placeholder="e.g. ADMIN_MANUAL_CREDIT" value="ADMIN-MANUAL-DEPOSIT">
+          </div>
+
+          <div id="admin-add-dep-error" class="alert-box alert-error hidden"></div>
+
+          <button type="submit" id="btn-submit-admin-dep" class="btn-primary full-width">
+            <i class="fa-solid fa-check-double"></i> Confirm & Add Deposit to User Vault
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: FULL USER DATA LEDGER & DEPOSIT HISTORY -->
+  <div id="modal-admin-user-ledger" class="modal-overlay hidden">
+    <div class="modal-card wide">
+      <div class="modal-header">
+        <div>
+          <h3><i class="fa-solid fa-folder-open text-gold"></i> Full User Data & Wallet Ledger</h3>
+          <p id="ledger-user-sub" style="font-size: 0.82rem; color: #64748b; margin-top: 0.2rem;"></p>
+        </div>
+        <button class="modal-close" onclick="closeAdminModal('modal-admin-user-ledger')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- USER METRICS CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem;">
+          <div style="background: linear-gradient(135deg, #0284c7, #0369a1); color: #fff; padding: 0.85rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(2,132,199,0.2);">
+            <div style="font-size: 0.75rem; text-transform: uppercase; opacity: 0.85;">Total Money in User Wallet</div>
+            <div id="ledger-stat-total" style="font-size: 1.35rem; font-weight: 800;">$0.00</div>
+          </div>
+          <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 0.85rem; border-radius: 12px;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: #64748b;">Locked Vault Principal</div>
+            <div id="ledger-stat-vault" style="font-size: 1.25rem; font-weight: 700; color: #0f172a;">$0.00</div>
+          </div>
+          <div style="background: #f0fdf4; border: 1.5px solid #86efac; padding: 0.85rem; border-radius: 12px;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: #166534;">Available Bonus Balance</div>
+            <div id="ledger-stat-avail" style="font-size: 1.25rem; font-weight: 700; color: #15803d;">$0.00</div>
+          </div>
+        </div>
+
+        <!-- FULL DEPOSITS HISTORY TABLE -->
+        <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: #1e293b;"><i class="fa-solid fa-list-check text-blue"></i> All Deposits & Dates Money Was Added</h4>
+        <div class="table-responsive" style="margin-bottom: 1.25rem; max-height: 250px; overflow-y: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fund #</th>
+                <th>Deposit ID</th>
+                <th>Exact Date Added</th>
+                <th>Amount (INR/USD)</th>
+                <th>UTR ID</th>
+                <th>Month 1 Start Date</th>
+                <th>Status</th>
+                <th>Payout Progress</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-debits-tbody">
+              <tr><td colspan="8" class="text-center py-3">No deposits found for this user.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- WITHDRAWALS HISTORY -->
+        <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: #1e293b;"><i class="fa-solid fa-clock-rotate-left text-gold"></i> Withdrawal History</h4>
+        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Req ID</th>
+                <th>Date Requested</th>
+                <th>Amount ($)</th>
+                <th>Method</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="ledger-withdrawals-tbody">
+              <tr><td colspan="5" class="text-center py-3">No withdrawal requests found.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- MODAL: FULL SCREENSHOT PAYMENT PROOF VIEWER -->
   <div id="modal-proof-viewer" class="modal-overlay hidden">

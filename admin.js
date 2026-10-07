@@ -98,9 +98,99 @@ async function showAdminDashboard() {
   loadAdminData();
 }
 
+// ==========================================================================
+// DATE MILESTONE HELPERS & AUTO PAYOUT ENGINE
+// ==========================================================================
+// Month 1 starts 1 month after deposit date (e.g. Deposit 5 Sep -> Month 1 on 5 Oct)
+function parseDepositDateObj(dateStr) {
+  if (!dateStr) return new Date();
+  if (typeof dateStr === 'string' && dateStr.includes('-')) {
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const y = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10) - 1;
+      const d = parseInt(parts[2], 10);
+      if (!isNaN(y) && !isNaN(m) && !isNaN(d)) return new Date(y, m, d);
+    }
+  }
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
+function getMilestoneDateObj(depositDateStr, monthNum) {
+  const base = parseDepositDateObj(depositDateStr);
+  return new Date(base.getFullYear(), base.getMonth() + monthNum, base.getDate());
+}
+
+function formatMilestoneDateStr(depositDateStr, monthNum) {
+  const d = getMilestoneDateObj(depositDateStr, monthNum);
+  return d.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function autoProcessScheduledPayouts() {
+  const localDebits = getLocalStore('debits') || {};
+  const localUsers = getLocalStore('users') || {};
+  let stateChanged = false;
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+
+  for (let dKey in localDebits) {
+    const debit = localDebits[dKey];
+    if (debit.status === 'Approved') {
+      const username = debit.username;
+      const depositDate = debit.date || new Date().toISOString().split('T')[0];
+      const monthlyBonus = debit.monthlyBonus || parseFloat(((debit.amount || 10) * 0.2).toFixed(2));
+      let currCount = parseInt(debit.creditedMonthCount || 0);
+
+      for (let m = currCount + 1; m <= 12; m++) {
+        const mDate = getMilestoneDateObj(depositDate, m);
+        const compareDate = new Date(mDate.getFullYear(), mDate.getMonth(), mDate.getDate());
+
+        if (now >= compareDate) {
+          // Scheduled milestone date reached! Auto-credit profit return to user's wallet
+          currCount = m;
+          debit.creditedMonthCount = m;
+
+          if (localUsers[username]) {
+            const currAvail = parseFloat(localUsers[username].availableBalance || 0);
+            localUsers[username].availableBalance = parseFloat((currAvail + monthlyBonus).toFixed(2));
+          }
+
+          stateChanged = true;
+
+          try {
+            if (window.db) {
+              db.ref(`debits/${dKey}`).update({ creditedMonthCount: m });
+              if (localUsers[username]) {
+                db.ref(`users/${username}`).update({ availableBalance: localUsers[username].availableBalance });
+              }
+            }
+          } catch (e) {}
+        } else {
+          break; // Future milestone dates have not arrived yet
+        }
+      }
+    }
+  }
+
+  if (stateChanged) {
+    setLocalStore('debits', localDebits);
+    setLocalStore('users', localUsers);
+  }
+}
+
+function runAdminAutoPayoutCheck() {
+  autoProcessScheduledPayouts();
+  loadAdminData();
+  showToast('✓ Auto-payout engine checked! All due milestone dates credited to user wallets.', 'success');
+}
+
 let debitsUnsub = null;
 
 function loadAdminData() {
+  // Always run auto-payout milestone check on admin data load
+  autoProcessScheduledPayouts();
+
   // Render Pending Deposit & Scheme Debits Table
   const renderDebitsTable = (debitsMap) => {
     const tbody = document.getElementById('admin-debits-tbody');
@@ -128,13 +218,17 @@ function loadAdminData() {
 
         let proofHtml = 'N/A';
         if (req.proofUrl) {
-          proofHtml = `
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-              <img src="${req.proofUrl}" alt="Proof" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 1.5px solid #0284c7; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onclick="openAdminProofModal('${req.utr || 'N/A'}', '${req.proofUrl}')" title="Click to view full screenshot">
-              <button type="button" class="btn-secondary-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="openAdminProofModal('${req.utr || 'N/A'}', '${req.proofUrl}')">
-                <i class="fa-solid fa-eye"></i> View
-              </button>
-            </div>`;
+          if (req.proofUrl === 'ADMIN_MANUAL_ENTRY') {
+            proofHtml = `<span class="badge-neutral" style="font-size: 0.75rem;"><i class="fa-solid fa-user-shield"></i> Admin Direct</span>`;
+          } else {
+            proofHtml = `
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <img src="${req.proofUrl}" alt="Proof" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 1.5px solid #0284c7; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onclick="openAdminProofModal('${req.utr || 'N/A'}', '${req.proofUrl}')" title="Click to view full screenshot">
+                <button type="button" class="btn-secondary-sm" style="font-size: 0.75rem; padding: 0.2rem 0.5rem;" onclick="openAdminProofModal('${req.utr || 'N/A'}', '${req.proofUrl}')">
+                  <i class="fa-solid fa-eye"></i> View
+                </button>
+              </div>`;
+          }
         }
 
         let actionHtml = '';
@@ -152,9 +246,9 @@ function loadAdminData() {
         }
 
         tr.innerHTML = `
-          <td><code>#${req.id.substring(0, 10)}</code></td>
+          <td><code>#${req.id.substring(0, 12)}</code></td>
           <td><strong>${req.fullName || req.username}</strong><br><small class="text-muted">@${req.username}</small></td>
-          <td>${req.date}</td>
+          <td><strong>${req.date}</strong></td>
           <td><strong class="text-blue">₹${inrDisp} ($${usdDisp} USD)</strong></td>
           <td><code style="background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: 700;">${req.utr || 'N/A'}</code></td>
           <td>${proofHtml}</td>
@@ -242,7 +336,7 @@ function loadAdminData() {
     });
   } catch(e) {}
 
-  // Render users table function
+  // Render full users table with total deposits, exact dates money added, vault & wallet totals
   const renderUsersTable = (usersObj) => {
     const tbody = document.getElementById('admin-users-tbody');
     if (!tbody) return;
@@ -257,62 +351,62 @@ function loadAdminData() {
       const u = usersObj[uKey];
       const locked = parseFloat(u.lockedDebitBalance || 0);
       const available = parseFloat(u.availableBalance || 0);
+      const totalWalletMoney = locked + available;
       totalSystemDebits += locked;
 
-      // Find all approved funds for this user
-      const userApprovedDebits = [];
+      // Find all deposits for this user
+      const userDebits = [];
       for (let dK in localDebits) {
-        if (localDebits[dK].username === u.username && localDebits[dK].status === 'Approved') {
-          userApprovedDebits.push({ id: dK, ...localDebits[dK] });
+        if (localDebits[dK].username === u.username) {
+          userDebits.push({ id: dK, ...localDebits[dK] });
         }
       }
-      userApprovedDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      userApprovedDebits.forEach((d, idx) => { if (!d.fundNumber) d.fundNumber = idx + 1; });
+      userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-      let creditActionHtml = '';
-      if (userApprovedDebits.length === 0) {
-        creditActionHtml = `<span class="text-muted" style="font-size: 0.82rem;">No Approved Funds Yet</span>`;
+      // Build HTML list of deposit dates and amounts
+      let depositDatesHtml = '';
+      if (userDebits.length === 0) {
+        depositDatesHtml = `<span class="text-muted" style="font-size: 0.8rem;">No Deposits Yet</span>`;
       } else {
-        userApprovedDebits.forEach(fund => {
-          const fLabel = `Fund ${fund.fundNumber}`;
-          const fAmount = parseFloat(fund.amount || 10);
-          const fBonus = fund.monthlyBonus || parseFloat((fAmount * 0.2).toFixed(2));
-          const fCount = parseInt(fund.creditedMonthCount || 0);
-          const fNextMonth = fCount + 1;
-
-          if (fCount < 12) {
-            creditActionHtml += `
-              <div style="margin-bottom: 0.45rem;">
-                <span class="fund-badge-pill" style="font-size: 0.75rem; margin-right: 0.35rem;"><i class="fa-solid fa-vault"></i> ${fLabel} ($${fAmount} USD)</span>
-                <button class="btn-emerald" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="adminCreditSpecificFundMonth('${fund.id}')">
-                  <i class="fa-solid fa-gift"></i> Credit Month ${fNextMonth} (+$${fBonus})
-                </button>
-                <small class="text-muted" style="margin-left: 0.3rem;">(${fCount}/12 Credited)</small>
-              </div>`;
-          } else {
-            creditActionHtml += `
-              <div style="margin-bottom: 0.45rem;">
-                <span class="fund-badge-pill" style="font-size: 0.75rem; margin-right: 0.35rem;">${fLabel} ($${fAmount} USD)</span>
-                <span class="badge-status success" style="font-size: 0.72rem;"><i class="fa-solid fa-circle-check"></i> All 12 Months Credited</span>
-              </div>`;
-          }
-        });
+        depositDatesHtml = userDebits.map((d, idx) => {
+          const dAmt = parseFloat(d.amount || 10);
+          const dInr = d.inrAmount ? d.inrAmount.toLocaleString('en-IN') : (dAmt * 100);
+          const statusColor = d.status === 'Approved' ? '#0284c7' : (d.status === 'Pending' ? '#d97706' : '#ef4444');
+          return `
+            <div style="display: inline-block; background: #f8fafc; border: 1px solid #cbd5e1; border-left: 3.5px solid ${statusColor}; padding: 0.2rem 0.45rem; border-radius: 4px; font-size: 0.76rem; margin: 0.15rem 0.15rem 0.15rem 0;">
+              <i class="fa-solid fa-calendar-day" style="color: #64748b;"></i> <strong>${d.date || 'N/A'}</strong>: ₹${dInr} ($${dAmt})
+            </div>`;
+        }).join('');
       }
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><strong>@${u.username}</strong></td>
-        <td>${u.fullName || 'N/A'}</td>
-        <td>${u.contactNumber || 'N/A'}</td>
+        <td>
+          <strong style="color: #0284c7; font-size: 0.95rem;">@${u.username}</strong><br>
+          <small class="text-muted"><i class="fa-solid fa-id-badge"></i> ${u.fullName || 'N/A'}</small>
+        </td>
+        <td><small><i class="fa-solid fa-phone"></i> ${u.contactNumber || 'N/A'}</small></td>
+        <td><span class="fund-badge-pill" style="font-size: 0.82rem;"><i class="fa-solid fa-receipt"></i> <strong>${userDebits.length}</strong> Deposits</span></td>
+        <td style="max-width: 260px;">${depositDatesHtml}</td>
         <td><strong class="text-blue">$${locked.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
         <td><strong class="text-green">$${available.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
-        <td>${creditActionHtml}</td>
+        <td><strong style="color: #059669; font-size: 1.05rem; background: #ecfdf5; padding: 0.25rem 0.65rem; border-radius: 6px; border: 1px solid #a7f3d0;">$${totalWalletMoney.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD</strong></td>
+        <td>
+          <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
+            <button class="btn-primary" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="openAdminUserLedger('${u.username}')">
+              <i class="fa-solid fa-folder-open"></i> Full Data Ledger
+            </button>
+            <button class="btn-secondary-sm" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="openAdminAddDepositModal('${u.username}')">
+              <i class="fa-solid fa-plus-circle"></i> Add Deposit
+            </button>
+          </div>
+        </td>
       `;
       tbody.appendChild(tr);
     }
 
     if (totalUsers === 0) {
-      tbody.innerHTML = `<tr><td colspan="6" class="text-center py-4">No user accounts created yet.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">No user accounts created yet.</td></tr>`;
     }
     const statUsers = document.getElementById('stat-total-users');
     if (statUsers) statUsers.textContent = totalUsers;
@@ -620,6 +714,256 @@ function adminCreditCustomBonus(username) {
   if (amount && amount > 0) {
     adminCreditBonus(username, amount);
   }
+}
+
+function closeAdminModal(modalId) {
+  const modal = document.getElementById(modalId);
+  if (modal) modal.classList.add('hidden');
+}
+
+function updateAdminDepUsdPreview(inrVal) {
+  const inr = parseFloat(inrVal) || 0;
+  const usd = parseFloat((inr / 100).toFixed(2));
+  const bonus = parseFloat((usd * 0.2).toFixed(2));
+  
+  const usdEl = document.getElementById('admin-dep-usd-prev');
+  if (usdEl) usdEl.textContent = `$${usd.toFixed(2)} USD`;
+  
+  const bonusEl = document.getElementById('admin-dep-bonus-prev');
+  if (bonusEl) bonusEl.textContent = `$${bonus.toFixed(2)}/mo`;
+}
+
+function openAdminAddDepositModal(preselectedUsername) {
+  const localUsers = getLocalStore('users') || {};
+  const userSelect = document.getElementById('admin-dep-user');
+  
+  if (userSelect) {
+    userSelect.innerHTML = '<option value="">-- Select Target User --</option>';
+    for (let uKey in localUsers) {
+      const u = localUsers[uKey];
+      const opt = document.createElement('option');
+      opt.value = u.username;
+      opt.textContent = `@${u.username} (${u.fullName || u.username})`;
+      if (preselectedUsername && preselectedUsername === u.username) {
+        opt.selected = true;
+      }
+      userSelect.appendChild(opt);
+    }
+  }
+
+  const dateInput = document.getElementById('admin-dep-date');
+  if (dateInput) {
+    // Default to today
+    dateInput.value = new Date().toISOString().split('T')[0];
+  }
+
+  const errDiv = document.getElementById('admin-add-dep-error');
+  if (errDiv) errDiv.classList.add('hidden');
+
+  updateAdminDepUsdPreview(document.getElementById('admin-dep-inr')?.value || 1000);
+  document.getElementById('modal-admin-add-deposit').classList.remove('hidden');
+}
+
+async function handleAdminAddDepositSubmit(event) {
+  event.preventDefault();
+
+  const username = document.getElementById('admin-dep-user').value;
+  const inrAmount = parseFloat(document.getElementById('admin-dep-inr').value);
+  const depositDate = document.getElementById('admin-dep-date').value;
+  const utr = document.getElementById('admin-dep-utr').value.trim() || 'ADMIN-DIRECT-DEPOSIT';
+  const errDiv = document.getElementById('admin-add-dep-error');
+  const submitBtn = document.getElementById('btn-submit-admin-dep');
+
+  if (errDiv) errDiv.classList.add('hidden');
+
+  if (!username) {
+    if (errDiv) { errDiv.textContent = 'Please select a target user.'; errDiv.classList.remove('hidden'); }
+    return;
+  }
+
+  if (!inrAmount || inrAmount < 100) {
+    if (errDiv) { errDiv.textContent = 'Please enter a valid deposit amount (min ₹100).'; errDiv.classList.remove('hidden'); }
+    return;
+  }
+
+  if (!depositDate) {
+    if (errDiv) { errDiv.textContent = 'Please select a valid deposit date.'; errDiv.classList.remove('hidden'); }
+    return;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Adding Deposit & Updating Vault...';
+  }
+
+  try {
+    const localUsers = getLocalStore('users') || {};
+    const localDebits = getLocalStore('debits') || {};
+    const userObj = localUsers[username] || { username: username, fullName: username };
+
+    const usdAmount = parseFloat((inrAmount / 100).toFixed(2));
+    const monthlyBonusUSD = parseFloat((usdAmount * 0.2).toFixed(2));
+    const debitId = 'DEB-ADM-' + Date.now();
+
+    const userExistingDebits = Object.values(localDebits).filter(d => d.username === username);
+    const fundNumber = userExistingDebits.length + 1;
+
+    const debitRecord = {
+      id: debitId,
+      username: username,
+      fullName: userObj.fullName || username,
+      fundNumber: fundNumber,
+      amount: usdAmount,
+      inrAmount: inrAmount,
+      date: depositDate, // Chosen deposit date (e.g. 5 Sep 2026)
+      monthlyBonus: monthlyBonusUSD,
+      monthsTotal: 12,
+      creditedMonthCount: 0,
+      utr: utr,
+      proofUrl: 'ADMIN_MANUAL_ENTRY',
+      status: 'Approved', // DIRECTLY APPROVED BY ADMIN
+      timestamp: Date.now()
+    };
+
+    // Save debit record to local store
+    localDebits[debitId] = debitRecord;
+    setLocalStore('debits', localDebits);
+
+    // Update user's locked vault balance
+    const currentLocked = parseFloat(userObj.lockedDebitBalance || 0);
+    userObj.lockedDebitBalance = currentLocked + usdAmount;
+    localUsers[username] = userObj;
+    setLocalStore('users', localUsers);
+
+    // Run auto-payout milestone engine in case chosen date was in the past (e.g. 5 Sep with Month 1 on 5 Oct)
+    autoProcessScheduledPayouts();
+
+    // Firebase sync
+    try {
+      await ensureFirebaseAuth();
+      await db.ref('debits/' + debitId).set(debitRecord);
+      await db.ref('users/' + username).update({
+        lockedDebitBalance: userObj.lockedDebitBalance,
+        availableBalance: userObj.availableBalance || 0
+      });
+    } catch (err) {
+      console.warn("Firebase RTDB admin deposit sync note:", err.message);
+    }
+
+    showToast(`✓ Added ₹${inrAmount.toLocaleString('en-IN')} ($${usdAmount} USD) deposit for @${username} on date ${depositDate}!`, 'success');
+
+    closeAdminModal('modal-admin-add-deposit');
+    document.getElementById('form-admin-add-deposit').reset();
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-solid fa-check-double"></i> Confirm & Add Deposit to User Vault'; }
+
+    loadAdminData();
+
+  } catch (err) {
+    console.error("Admin add deposit error:", err);
+    if (errDiv) { errDiv.textContent = 'Could not process deposit. Please try again.'; errDiv.classList.remove('hidden'); }
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = '<i class="fa-solid fa-check-double"></i> Confirm & Add Deposit to User Vault'; }
+  }
+}
+
+// FULL USER DATA LEDGER & TRANSACTION HISTORY MODAL
+function openAdminUserLedger(username) {
+  // Always run milestone auto-payout check first
+  autoProcessScheduledPayouts();
+
+  const localUsers = getLocalStore('users') || {};
+  const localDebits = getLocalStore('debits') || {};
+  const localWithdrawals = getLocalStore('withdrawals') || {};
+
+  const u = localUsers[username] || { username: username };
+  const locked = parseFloat(u.lockedDebitBalance || 0);
+  const available = parseFloat(u.availableBalance || 0);
+  const totalWalletMoney = locked + available;
+
+  const subEl = document.getElementById('ledger-user-sub');
+  if (subEl) {
+    subEl.innerHTML = `<strong>@${u.username}</strong> | Full Name: <strong>${u.fullName || 'N/A'}</strong> | Contact: <strong>${u.contactNumber || 'N/A'}</strong> | Email: <strong>${u.email || 'N/A'}</strong>`;
+  }
+
+  const statTot = document.getElementById('ledger-stat-total');
+  if (statTot) statTot.textContent = `$${totalWalletMoney.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD (₹${(totalWalletMoney * 100).toLocaleString('en-IN')})`;
+
+  const statVault = document.getElementById('ledger-stat-vault');
+  if (statVault) statVault.textContent = `$${locked.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`;
+
+  const statAvail = document.getElementById('ledger-stat-avail');
+  if (statAvail) statAvail.textContent = `$${available.toLocaleString('en-US', { minimumFractionDigits: 2 })} USD`;
+
+  // Render User Debits / Deposits Table
+  const debitsTbody = document.getElementById('ledger-debits-tbody');
+  if (debitsTbody) {
+    debitsTbody.innerHTML = '';
+    const userDebits = [];
+    for (let k in localDebits) {
+      if (localDebits[k].username === username) {
+        userDebits.push({ id: k, ...localDebits[k] });
+      }
+    }
+    userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+    if (userDebits.length === 0) {
+      debitsTbody.innerHTML = `<tr><td colspan="8" class="text-center py-3">No deposit history found for @${username}.</td></tr>`;
+    } else {
+      userDebits.forEach((d, idx) => {
+        const tr = document.createElement('tr');
+        const inrDisp = d.inrAmount ? d.inrAmount.toLocaleString('en-IN') : (d.amount * 100);
+        const usdDisp = parseFloat(d.amount).toLocaleString('en-US', { minimumFractionDigits: 2 });
+        const month1StartStr = formatMilestoneDateStr(d.date, 1);
+        const creditedCount = parseInt(d.creditedMonthCount || 0);
+
+        let statusClass = 'pending';
+        if (d.status === 'Approved') statusClass = 'success';
+        if (d.status === 'Rejected') statusClass = 'danger';
+
+        tr.innerHTML = `
+          <td><strong>Fund ${d.fundNumber || idx + 1}</strong></td>
+          <td><code>#${d.id.substring(0, 12)}</code></td>
+          <td><strong style="color: #0284c7;">${d.date || 'N/A'}</strong></td>
+          <td><strong>₹${inrDisp} ($${usdDisp} USD)</strong></td>
+          <td><code>${d.utr || 'N/A'}</code></td>
+          <td><span style="color: #0284c7; font-weight: 600;"><i class="fa-solid fa-calendar-check"></i> ${month1StartStr}</span></td>
+          <td><span class="badge-status ${statusClass}">${d.status || 'Pending'}</span></td>
+          <td><strong class="text-green">${creditedCount} / 12</strong> Months Credited</td>
+        `;
+        debitsTbody.appendChild(tr);
+      });
+    }
+  }
+
+  // Render User Withdrawals Table
+  const wTbody = document.getElementById('ledger-withdrawals-tbody');
+  if (wTbody) {
+    wTbody.innerHTML = '';
+    const userW = [];
+    for (let k in localWithdrawals) {
+      if (localWithdrawals[k].username === username) {
+        userW.push({ id: k, ...localWithdrawals[k] });
+      }
+    }
+    userW.reverse();
+
+    if (userW.length === 0) {
+      wTbody.innerHTML = `<tr><td colspan="5" class="text-center py-3">No withdrawal requests found.</td></tr>`;
+    } else {
+      userW.forEach(w => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><code>#${w.id.substring(0, 8)}</code></td>
+          <td>${w.date}</td>
+          <td><strong class="text-green">$${parseFloat(w.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
+          <td><span class="badge-neutral">${w.method}</span></td>
+          <td><span class="status-badge ${w.status.toLowerCase()}">${w.status}</span></td>
+        `;
+        wTbody.appendChild(tr);
+      });
+    }
+  }
+
+  document.getElementById('modal-admin-user-ledger').classList.remove('hidden');
 }
 
 function showToast(message, type = 'info') {
