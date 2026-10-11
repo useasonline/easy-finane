@@ -400,13 +400,16 @@ function loadAdminData() {
         <td>
           <div style="display: flex; gap: 0.35rem; flex-wrap: wrap;">
             <button class="btn-primary" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="openAdminUserLedger('${u.username}')">
-              <i class="fa-solid fa-folder-open"></i> Full Data Ledger
+              <i class="fa-solid fa-folder-open"></i> Ledger
             </button>
             <button class="btn-secondary-sm" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="openAdminAddDepositModal('${u.username}')">
               <i class="fa-solid fa-plus-circle"></i> Add Deposit
             </button>
+            <button class="btn-emerald" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="downloadSingleUserCSV('${u.username}')" title="Download CSV ledger for @${u.username}">
+              <i class="fa-solid fa-file-excel"></i> CSV
+            </button>
             <button class="btn-danger-sm" style="padding: 0.35rem 0.65rem; font-size: 0.78rem;" onclick="promptDeleteUser('${u.username}')" title="Permanently delete user account">
-              <i class="fa-solid fa-trash-can"></i> Delete User
+              <i class="fa-solid fa-trash-can"></i> Delete
             </button>
           </div>
         </td>
@@ -1413,60 +1416,282 @@ async function purgeDeletedUserPermanently(username) {
 // ==========================================================================
 // EXCEL / CSV EXPORT ENGINES
 // ==========================================================================
-function downloadActiveUsersDepositsCSV() {
-  const localUsers = getLocalStore('users') || {};
-  const localDebits = getLocalStore('debits') || {};
+async function downloadActiveUsersDepositsCSV() {
+  try {
+    let localUsers = getLocalStore('users') || {};
+    let localDebits = getLocalStore('debits') || {};
 
-  const headers = [
-    "User Full Name",
-    "Username",
-    "Contact Number",
-    "Email",
-    "Fund Number",
-    "Deposit ID",
-    "Deposit Date",
-    "Deposit Amount (INR)",
-    "Deposit Amount (USD)",
-    "Monthly Charge / Return Rate",
-    "Monthly Charge Amount (USD)",
-    "Monthly Charge Amount (INR)",
-    "Months Credited (of 12)",
-    "Total Charges Credited (USD)",
-    "Total Charges Credited (INR)",
-    "Remaining Months (of 12)",
-    "Total Charges Remaining (USD)",
-    "Total Charges Remaining (INR)",
-    "Next Monthly Charge Due Date",
-    "Month 1 Charge Deposit Date",
-    "Month 2 Charge Deposit Date",
-    "Month 3 Charge Deposit Date",
-    "Month 4 Charge Deposit Date",
-    "Month 5 Charge Deposit Date",
-    "Month 6 Charge Deposit Date",
-    "Month 7 Charge Deposit Date",
-    "Month 8 Charge Deposit Date",
-    "Month 9 Charge Deposit Date",
-    "Month 10 Charge Deposit Date",
-    "Month 11 Charge Deposit Date",
-    "Month 12 Charge Deposit Date",
-    "Locked Vault Principal (USD)",
-    "Available Bonus Balance (USD)",
-    "Total Money in Wallet (USD)",
-    "Total Money in Wallet (INR)",
-    "UTR Reference",
-    "Deposit Status"
-  ];
+    // 1. If local storage is empty or stale, fetch directly from Firebase
+    if (Object.keys(localUsers).length === 0 && window.db) {
+      try {
+        await ensureFirebaseAuth();
+        const userSnap = await db.ref('users').once('value');
+        if (userSnap.exists()) {
+          localUsers = userSnap.val() || {};
+          setLocalStore('users', localUsers);
+        }
+        const debSnap = await db.ref('debits').once('value');
+        if (debSnap.exists()) {
+          localDebits = debSnap.val() || {};
+          setLocalStore('debits', localDebits);
+        }
+      } catch (e) {
+        console.warn("Direct Firebase fetch note:", e.message);
+      }
+    }
 
-  const rows = [];
-  const activeUsernames = Object.keys(localUsers);
+    const headers = [
+      "User Full Name",
+      "Username",
+      "Contact Number",
+      "Email",
+      "Fund Number",
+      "Deposit ID",
+      "Deposit Date",
+      "Deposit Amount (INR)",
+      "Deposit Amount (USD)",
+      "Monthly Charge / Return Rate",
+      "Monthly Charge Amount (USD)",
+      "Monthly Charge Amount (INR)",
+      "Months Credited (of 12)",
+      "Total Charges Credited (USD)",
+      "Total Charges Credited (INR)",
+      "Remaining Months (of 12)",
+      "Total Charges Remaining (USD)",
+      "Total Charges Remaining (INR)",
+      "Next Monthly Charge Due Date",
+      "Month 1 Charge Deposit Date",
+      "Month 2 Charge Deposit Date",
+      "Month 3 Charge Deposit Date",
+      "Month 4 Charge Deposit Date",
+      "Month 5 Charge Deposit Date",
+      "Month 6 Charge Deposit Date",
+      "Month 7 Charge Deposit Date",
+      "Month 8 Charge Deposit Date",
+      "Month 9 Charge Deposit Date",
+      "Month 10 Charge Deposit Date",
+      "Month 11 Charge Deposit Date",
+      "Month 12 Charge Deposit Date",
+      "Locked Vault Principal (USD)",
+      "Available Bonus Balance (USD)",
+      "Total Money in Wallet (USD)",
+      "Total Money in Wallet (INR)",
+      "UTR Reference",
+      "Deposit Status"
+    ];
 
-  if (activeUsernames.length === 0) {
-    showToast("No active users available to export.", "info");
-    return;
+    const rows = [];
+    const activeUsernames = Object.keys(localUsers);
+
+    if (activeUsernames.length === 0) {
+      // Always generate and download the file with headers and placeholder row so admin gets the Excel sheet
+      rows.push([
+        "No Active Users Registered Yet",
+        "N/A",
+        "N/A",
+        "N/A",
+        "None",
+        "N/A",
+        "N/A",
+        0,
+        0,
+        "20%",
+        0,
+        0,
+        0,
+        0,
+        0,
+        12,
+        0,
+        0,
+        "N/A",
+        "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",
+        "0.00",
+        "0.00",
+        "0.00",
+        0,
+        "N/A",
+        "No Active Users"
+      ]);
+    } else {
+      for (const username of activeUsernames) {
+        const u = localUsers[username] || {};
+        const locked = parseFloat(u.lockedDebitBalance || 0);
+        const available = parseFloat(u.availableBalance || 0);
+        const totalWalletUSD = locked + available;
+        const totalWalletINR = Math.round(totalWalletUSD * 100);
+
+        const userDebits = [];
+        for (const dKey in localDebits) {
+          if (localDebits[dKey] && localDebits[dKey].username === username) {
+            userDebits.push({ id: dKey, ...localDebits[dKey] });
+          }
+        }
+        userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+        if (userDebits.length === 0) {
+          rows.push([
+            u.fullName || username,
+            "@" + username,
+            u.contactNumber || "N/A",
+            u.email || "N/A",
+            "None",
+            "N/A",
+            "No Deposits Yet",
+            0,
+            0,
+            "20%",
+            0,
+            0,
+            0,
+            0,
+            0,
+            12,
+            0,
+            0,
+            "N/A",
+            "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",
+            locked.toFixed(2),
+            available.toFixed(2),
+            totalWalletUSD.toFixed(2),
+            totalWalletINR,
+            "N/A",
+            "No Deposits"
+          ]);
+        } else {
+          userDebits.forEach((d, idx) => {
+            const dAmt = parseFloat(d.amount || 10);
+            const dInr = d.inrAmount ? d.inrAmount : Math.round(dAmt * 100);
+            const monthlyBonusUSD = d.monthlyBonus || parseFloat((dAmt * 0.2).toFixed(2));
+            const monthlyBonusINR = Math.round(monthlyBonusUSD * 100);
+            const creditedCount = parseInt(d.creditedMonthCount || 0);
+            const remainingMonths = Math.max(0, 12 - creditedCount);
+            const totalCreditedUSD = parseFloat((creditedCount * monthlyBonusUSD).toFixed(2));
+            const totalCreditedINR = Math.round(totalCreditedUSD * 100);
+            const totalRemainingUSD = parseFloat((remainingMonths * monthlyBonusUSD).toFixed(2));
+            const totalRemainingINR = Math.round(totalRemainingUSD * 100);
+
+            const depositDate = d.date || "N/A";
+            const nextMilestoneDateStr = creditedCount < 12 
+              ? formatMilestoneDateStr(depositDate, creditedCount + 1)
+              : "Completed (12/12)";
+
+            const mDates = [];
+            for (let m = 1; m <= 12; m++) {
+              mDates.push(formatMilestoneDateStr(depositDate, m));
+            }
+
+            rows.push([
+              u.fullName || username,
+              "@" + username,
+              u.contactNumber || "N/A",
+              u.email || "N/A",
+              d.fundNumber ? `Fund ${d.fundNumber}` : `Fund ${idx + 1}`,
+              d.id || `DEB-${idx + 1}`,
+              depositDate,
+              dInr,
+              dAmt.toFixed(2),
+              "20% Monthly",
+              monthlyBonusUSD.toFixed(2),
+              monthlyBonusINR,
+              creditedCount,
+              totalCreditedUSD.toFixed(2),
+              totalCreditedINR,
+              remainingMonths,
+              totalRemainingUSD.toFixed(2),
+              totalRemainingINR,
+              nextMilestoneDateStr,
+              ...mDates,
+              locked.toFixed(2),
+              available.toFixed(2),
+              totalWalletUSD.toFixed(2),
+              totalWalletINR,
+              d.utr || "N/A",
+              d.status || "Approved"
+            ]);
+          });
+        }
+      }
+    }
+
+    const csvContent = [
+      headers.map(escapeCSVCell).join(","),
+      ...rows.map(row => row.map(escapeCSVCell).join(","))
+    ].join("\r\n");
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    downloadCSVFile(`EFinance_Active_Users_Deposits_and_Charges_${todayStr}.csv`, csvContent);
+    showToast("✓ Active users deposits & monthly charges CSV downloaded successfully!", "success");
+
+  } catch (err) {
+    console.error("downloadActiveUsersDepositsCSV error:", err);
+    showToast("Error generating CSV: " + (err.message || "Unknown error"), "error");
   }
+}
 
-  for (const username of activeUsernames) {
-    const u = localUsers[username];
+async function downloadSingleUserCSV(username) {
+  try {
+    let localUsers = getLocalStore('users') || {};
+    let localDebits = getLocalStore('debits') || {};
+
+    if (!localUsers[username] && window.db) {
+      try {
+        await ensureFirebaseAuth();
+        const uSnap = await db.ref('users/' + username).once('value');
+        if (uSnap.exists()) {
+          localUsers[username] = uSnap.val();
+          setLocalStore('users', localUsers);
+        }
+        const dSnap = await db.ref('debits').once('value');
+        if (dSnap.exists()) {
+          localDebits = dSnap.val() || {};
+          setLocalStore('debits', localDebits);
+        }
+      } catch (e) {}
+    }
+
+    const u = localUsers[username] || { username: username };
+
+    const headers = [
+      "User Full Name",
+      "Username",
+      "Contact Number",
+      "Email",
+      "Fund Number",
+      "Deposit ID",
+      "Deposit Date",
+      "Deposit Amount (INR)",
+      "Deposit Amount (USD)",
+      "Monthly Charge / Return Rate",
+      "Monthly Charge Amount (USD)",
+      "Monthly Charge Amount (INR)",
+      "Months Credited (of 12)",
+      "Total Charges Credited (USD)",
+      "Total Charges Credited (INR)",
+      "Remaining Months (of 12)",
+      "Total Charges Remaining (USD)",
+      "Total Charges Remaining (INR)",
+      "Next Monthly Charge Due Date",
+      "Month 1 Charge Deposit Date",
+      "Month 2 Charge Deposit Date",
+      "Month 3 Charge Deposit Date",
+      "Month 4 Charge Deposit Date",
+      "Month 5 Charge Deposit Date",
+      "Month 6 Charge Deposit Date",
+      "Month 7 Charge Deposit Date",
+      "Month 8 Charge Deposit Date",
+      "Month 9 Charge Deposit Date",
+      "Month 10 Charge Deposit Date",
+      "Month 11 Charge Deposit Date",
+      "Month 12 Charge Deposit Date",
+      "Locked Vault Principal (USD)",
+      "Available Bonus Balance (USD)",
+      "Total Money in Wallet (USD)",
+      "Total Money in Wallet (INR)",
+      "UTR Reference",
+      "Deposit Status"
+    ];
+
     const locked = parseFloat(u.lockedDebitBalance || 0);
     const available = parseFloat(u.availableBalance || 0);
     const totalWalletUSD = locked + available;
@@ -1474,12 +1699,13 @@ function downloadActiveUsersDepositsCSV() {
 
     const userDebits = [];
     for (const dKey in localDebits) {
-      if (localDebits[dKey].username === username) {
+      if (localDebits[dKey] && localDebits[dKey].username === username) {
         userDebits.push({ id: dKey, ...localDebits[dKey] });
       }
     }
     userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
+    const rows = [];
     if (userDebits.length === 0) {
       rows.push([
         u.fullName || username,
@@ -1538,7 +1764,7 @@ function downloadActiveUsersDepositsCSV() {
           u.contactNumber || "N/A",
           u.email || "N/A",
           d.fundNumber ? `Fund ${d.fundNumber}` : `Fund ${idx + 1}`,
-          d.id,
+          d.id || `DEB-${idx + 1}`,
           depositDate,
           dInr,
           dAmt.toFixed(2),
@@ -1562,231 +1788,110 @@ function downloadActiveUsersDepositsCSV() {
         ]);
       });
     }
+
+    const csvContent = [
+      headers.map(escapeCSVCell).join(","),
+      ...rows.map(row => row.map(escapeCSVCell).join(","))
+    ].join("\r\n");
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    downloadCSVFile(`EFinance_User_${username}_Deposits_and_Charges_${todayStr}.csv`, csvContent);
+    showToast(`✓ Ledger CSV for @${username} downloaded successfully!`, "success");
+  } catch (err) {
+    console.error("downloadSingleUserCSV error:", err);
+    showToast("Error generating user CSV", "error");
   }
-
-  const csvContent = [
-    headers.map(escapeCSVCell).join(","),
-    ...rows.map(row => row.map(escapeCSVCell).join(","))
-  ].join("\r\n");
-
-  const todayStr = new Date().toISOString().split("T")[0];
-  downloadCSVFile(`EFinance_Active_Users_Deposits_and_Charges_${todayStr}.csv`, csvContent);
-  showToast("✓ Active users deposits & monthly charges CSV downloaded successfully!", "success");
-}
-
-function downloadSingleUserCSV(username) {
-  const localUsers = getLocalStore('users') || {};
-  const localDebits = getLocalStore('debits') || {};
-
-  const u = localUsers[username];
-  if (!u) {
-    showToast(`User @${username} not found.`, 'error');
-    return;
-  }
-
-  const headers = [
-    "User Full Name",
-    "Username",
-    "Contact Number",
-    "Email",
-    "Fund Number",
-    "Deposit ID",
-    "Deposit Date",
-    "Deposit Amount (INR)",
-    "Deposit Amount (USD)",
-    "Monthly Charge / Return Rate",
-    "Monthly Charge Amount (USD)",
-    "Monthly Charge Amount (INR)",
-    "Months Credited (of 12)",
-    "Total Charges Credited (USD)",
-    "Total Charges Credited (INR)",
-    "Remaining Months (of 12)",
-    "Total Charges Remaining (USD)",
-    "Total Charges Remaining (INR)",
-    "Next Monthly Charge Due Date",
-    "Month 1 Charge Deposit Date",
-    "Month 2 Charge Deposit Date",
-    "Month 3 Charge Deposit Date",
-    "Month 4 Charge Deposit Date",
-    "Month 5 Charge Deposit Date",
-    "Month 6 Charge Deposit Date",
-    "Month 7 Charge Deposit Date",
-    "Month 8 Charge Deposit Date",
-    "Month 9 Charge Deposit Date",
-    "Month 10 Charge Deposit Date",
-    "Month 11 Charge Deposit Date",
-    "Month 12 Charge Deposit Date",
-    "Locked Vault Principal (USD)",
-    "Available Bonus Balance (USD)",
-    "Total Money in Wallet (USD)",
-    "Total Money in Wallet (INR)",
-    "UTR Reference",
-    "Deposit Status"
-  ];
-
-  const locked = parseFloat(u.lockedDebitBalance || 0);
-  const available = parseFloat(u.availableBalance || 0);
-  const totalWalletUSD = locked + available;
-  const totalWalletINR = Math.round(totalWalletUSD * 100);
-
-  const userDebits = [];
-  for (const dKey in localDebits) {
-    if (localDebits[dKey].username === username) {
-      userDebits.push({ id: dKey, ...localDebits[dKey] });
-    }
-  }
-  userDebits.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
-  const rows = [];
-  if (userDebits.length === 0) {
-    rows.push([
-      u.fullName || username,
-      "@" + username,
-      u.contactNumber || "N/A",
-      u.email || "N/A",
-      "None",
-      "N/A",
-      "No Deposits Yet",
-      0,
-      0,
-      "20%",
-      0,
-      0,
-      0,
-      0,
-      0,
-      12,
-      0,
-      0,
-      "N/A",
-      "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A", "N/A",
-      locked.toFixed(2),
-      available.toFixed(2),
-      totalWalletUSD.toFixed(2),
-      totalWalletINR,
-      "N/A",
-      "No Deposits"
-    ]);
-  } else {
-    userDebits.forEach((d, idx) => {
-      const dAmt = parseFloat(d.amount || 10);
-      const dInr = d.inrAmount ? d.inrAmount : Math.round(dAmt * 100);
-      const monthlyBonusUSD = d.monthlyBonus || parseFloat((dAmt * 0.2).toFixed(2));
-      const monthlyBonusINR = Math.round(monthlyBonusUSD * 100);
-      const creditedCount = parseInt(d.creditedMonthCount || 0);
-      const remainingMonths = Math.max(0, 12 - creditedCount);
-      const totalCreditedUSD = parseFloat((creditedCount * monthlyBonusUSD).toFixed(2));
-      const totalCreditedINR = Math.round(totalCreditedUSD * 100);
-      const totalRemainingUSD = parseFloat((remainingMonths * monthlyBonusUSD).toFixed(2));
-      const totalRemainingINR = Math.round(totalRemainingUSD * 100);
-
-      const depositDate = d.date || "N/A";
-      const nextMilestoneDateStr = creditedCount < 12 
-        ? formatMilestoneDateStr(depositDate, creditedCount + 1)
-        : "Completed (12/12)";
-
-      const mDates = [];
-      for (let m = 1; m <= 12; m++) {
-        mDates.push(formatMilestoneDateStr(depositDate, m));
-      }
-
-      rows.push([
-        u.fullName || username,
-        "@" + username,
-        u.contactNumber || "N/A",
-        u.email || "N/A",
-        d.fundNumber ? `Fund ${d.fundNumber}` : `Fund ${idx + 1}`,
-        d.id,
-        depositDate,
-        dInr,
-        dAmt.toFixed(2),
-        "20% Monthly",
-        monthlyBonusUSD.toFixed(2),
-        monthlyBonusINR,
-        creditedCount,
-        totalCreditedUSD.toFixed(2),
-        totalCreditedINR,
-        remainingMonths,
-        totalRemainingUSD.toFixed(2),
-        totalRemainingINR,
-        nextMilestoneDateStr,
-        ...mDates,
-        locked.toFixed(2),
-        available.toFixed(2),
-        totalWalletUSD.toFixed(2),
-        totalWalletINR,
-        d.utr || "N/A",
-        d.status || "Approved"
-      ]);
-    });
-  }
-
-  const csvContent = [
-    headers.map(escapeCSVCell).join(","),
-    ...rows.map(row => row.map(escapeCSVCell).join(","))
-  ].join("\r\n");
-
-  const todayStr = new Date().toISOString().split("T")[0];
-  downloadCSVFile(`EFinance_User_${username}_Deposits_and_Charges_${todayStr}.csv`, csvContent);
-  showToast(`✓ Ledger CSV for @${username} downloaded successfully!`, "success");
 }
 
 function downloadSingleUserLedgerCSV() {
   if (currentLedgerUsername) {
     downloadSingleUserCSV(currentLedgerUsername);
+  } else {
+    downloadActiveUsersDepositsCSV();
   }
 }
 
-function downloadDeletedUsersCSV() {
-  const localDeleted = getLocalStore('deleted_users') || {};
-  const list = Object.values(localDeleted);
+async function downloadDeletedUsersCSV() {
+  try {
+    let localDeleted = getLocalStore('deleted_users') || {};
 
-  if (list.length === 0) {
-    showToast("No deleted users records found to export.", "info");
-    return;
-  }
+    if (Object.keys(localDeleted).length === 0 && window.db) {
+      try {
+        await ensureFirebaseAuth();
+        const delSnap = await db.ref('deleted_users').once('value');
+        if (delSnap.exists()) {
+          localDeleted = delSnap.val() || {};
+          setLocalStore('deleted_users', localDeleted);
+        }
+      } catch (e) {}
+    }
 
-  const headers = [
-    "Deleted User Full Name",
-    "Username",
-    "Contact Number",
-    "Email",
-    "Deletion Date & Time",
-    "Deletion Reason",
-    "Deleted By",
-    "Total Historical Deposits Count",
-    "Locked Vault Principal at Deletion ($)",
-    "Available Balance at Deletion ($)",
-    "Total Wallet Money at Deletion ($)",
-    "Archived Deposit IDs & Dates"
-  ];
+    const list = Object.values(localDeleted);
 
-  const rows = list.map(d => {
-    const depListStr = (d.userDebits || []).map(deb => `${deb.id} (${deb.date || 'N/A'}: $${deb.amount || 0})`).join(" | ");
-    return [
-      d.fullName || d.username,
-      "@" + d.username,
-      d.contactNumber || "N/A",
-      d.email || "N/A",
-      d.deletedAt || "N/A",
-      d.deletionReason || "Deleted by Administrator",
-      d.deletedBy || "Administrator",
-      d.totalDepositsCount !== undefined ? d.totalDepositsCount : (d.userDebits ? d.userDebits.length : 0),
-      parseFloat(d.lockedDebitBalance || 0).toFixed(2),
-      parseFloat(d.availableBalance || 0).toFixed(2),
-      parseFloat(d.totalWalletMoney || 0).toFixed(2),
-      depListStr || "None"
+    const headers = [
+      "Deleted User Full Name",
+      "Username",
+      "Contact Number",
+      "Email",
+      "Deletion Date & Time",
+      "Deletion Reason",
+      "Deleted By",
+      "Total Historical Deposits Count",
+      "Locked Vault Principal at Deletion ($)",
+      "Available Balance at Deletion ($)",
+      "Total Wallet Money at Deletion ($)",
+      "Archived Deposit IDs & Dates"
     ];
-  });
 
-  const csvContent = [
-    headers.map(escapeCSVCell).join(","),
-    ...rows.map(row => row.map(escapeCSVCell).join(","))
-  ].join("\r\n");
+    const rows = [];
 
-  const todayStr = new Date().toISOString().split("T")[0];
-  downloadCSVFile(`EFinance_Previous_Deleted_Users_${todayStr}.csv`, csvContent);
-  showToast("✓ Previous deleted users CSV downloaded!", "success");
+    if (list.length === 0) {
+      rows.push([
+        "No Deleted Users Recorded Yet",
+        "N/A",
+        "N/A",
+        "N/A",
+        "N/A",
+        "No Previous Deletes Recorded",
+        "Administrator",
+        0,
+        "0.00",
+        "0.00",
+        "0.00",
+        "None"
+      ]);
+    } else {
+      list.forEach(d => {
+        const depListStr = (d.userDebits || []).map(deb => `${deb.id} (${deb.date || 'N/A'}: $${deb.amount || 0})`).join(" | ");
+        rows.push([
+          d.fullName || d.username,
+          "@" + d.username,
+          d.contactNumber || "N/A",
+          d.email || "N/A",
+          d.deletedAt || "N/A",
+          d.deletionReason || "Deleted by Administrator",
+          d.deletedBy || "Administrator",
+          d.totalDepositsCount !== undefined ? d.totalDepositsCount : (d.userDebits ? d.userDebits.length : 0),
+          parseFloat(d.lockedDebitBalance || 0).toFixed(2),
+          parseFloat(d.availableBalance || 0).toFixed(2),
+          parseFloat(d.totalWalletMoney || 0).toFixed(2),
+          depListStr || "None"
+        ]);
+      });
+    }
+
+    const csvContent = [
+      headers.map(escapeCSVCell).join(","),
+      ...rows.map(row => row.map(escapeCSVCell).join(","))
+    ].join("\r\n");
+
+    const todayStr = new Date().toISOString().split("T")[0];
+    downloadCSVFile(`EFinance_Previous_Deleted_Users_${todayStr}.csv`, csvContent);
+    showToast("✓ Previous deleted users CSV downloaded!", "success");
+  } catch (err) {
+    console.error("downloadDeletedUsersCSV error:", err);
+    showToast("Error generating deleted users CSV", "error");
+  }
 }
 
 function escapeCSVCell(val) {
@@ -1799,15 +1904,58 @@ function escapeCSVCell(val) {
 }
 
 function downloadCSVFile(filename, csvContent) {
-  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.setAttribute("href", url);
-  link.setAttribute("download", filename);
-  link.style.visibility = "hidden";
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  try {
+    // UTF-8 BOM so Excel opens Hindi, currencies, and numbers with correct column formatting
+    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+
+    // Method 1: msSaveBlob for legacy Windows Edge/IE
+    if (window.navigator && window.navigator.msSaveOrOpenBlob) {
+      window.navigator.msSaveOrOpenBlob(blob, filename);
+      return;
+    }
+
+    // Method 2: Standard HTML5 Blob download
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.setAttribute("download", filename);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+
+    // Critical: Do NOT revoke synchronously! Keep alive for 10 seconds so Chrome/Edge download manager processes it
+    setTimeout(() => {
+      try {
+        if (link && link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      } catch (err) {}
+    }, 10000);
+
+  } catch (err) {
+    console.warn("Blob download failed, using data URI fallback:", err);
+    // Method 3: Data URI fallback if Blob is restricted by browser security policies
+    try {
+      const encodedUri = "data:text/csv;charset=utf-8,\uFEFF" + encodeURIComponent(csvContent);
+      const link = document.createElement("a");
+      link.href = encodedUri;
+      link.download = filename;
+      link.setAttribute("download", filename);
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      setTimeout(() => {
+        try {
+          if (link && link.parentNode) link.parentNode.removeChild(link);
+        } catch (e) {}
+      }, 5000);
+    } catch (fallbackErr) {
+      console.error("Data URI fallback failed:", fallbackErr);
+      alert("Could not trigger automatic download. Please ensure your browser permits file downloads.");
+    }
+  }
 }
+
 
