@@ -122,6 +122,14 @@
             <span id="stat-pending-withdrawals" class="stat-value">0</span>
           </div>
         </div>
+
+        <div class="admin-stat-card">
+          <div class="stat-icon" style="background: rgba(220, 38, 38, 0.12); color: #dc2626;"><i class="fa-solid fa-user-xmark"></i></div>
+          <div class="stat-details">
+            <span class="stat-title">Previous Deletes</span>
+            <span id="stat-total-deleted-users" class="stat-value">0</span>
+          </div>
+        </div>
       </div>
 
       <!-- SECTION: PENDING DEPOSITS & SCHEME DEBITS APPROVAL (ACTION REQUIRED) -->
@@ -191,6 +199,9 @@
             <p style="font-size: 0.82rem; color: #64748b; margin-top: 0.2rem;">Full deposit counts, dates money added, vault balances, and total wallet money</p>
           </div>
           <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button type="button" class="btn-emerald" style="padding: 0.45rem 0.95rem; font-size: 0.85rem;" onclick="downloadActiveUsersDepositsCSV()" title="Download Excel CSV of present active users, deposit dates, and monthly charge schedules">
+              <i class="fa-solid fa-file-excel"></i> Download Users & Charges CSV
+            </button>
             <button type="button" class="btn-primary" style="padding: 0.45rem 0.9rem; font-size: 0.85rem;" onclick="openAdminAddDepositModal()">
               <i class="fa-solid fa-plus-circle"></i> Add Deposit at Selected Date
             </button>
@@ -217,6 +228,46 @@
             <tbody id="admin-users-tbody">
               <tr>
                 <td colspan="8" class="text-center py-4">Loading user accounts...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- SECTION: PREVIOUS DELETES (DELETED USERS HISTORY) -->
+      <div class="dash-section margin-top">
+        <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+          <div>
+            <h3><i class="fa-solid fa-user-xmark text-danger"></i> Previous Deletes (Deleted Users History)</h3>
+            <p style="font-size: 0.82rem; color: #64748b; margin-top: 0.2rem;">Complete archive of permanently deleted user accounts, historical deposit totals, and deletion records</p>
+          </div>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <span id="stat-deleted-count-badge" class="badge-neutral" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-weight: 700; padding: 0.35rem 0.75rem; border-radius: 6px;">
+              <i class="fa-solid fa-trash-can"></i> <span id="stat-deleted-users-count">0</span> Deleted Accounts
+            </span>
+            <button type="button" class="btn-secondary-sm" onclick="downloadDeletedUsersCSV()" title="Download CSV record of all previously deleted users">
+              <i class="fa-solid fa-file-csv"></i> Download Deleted History CSV
+            </button>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Deleted User / Username</th>
+                <th>Contact & Email</th>
+                <th>Historical Deposits</th>
+                <th>Vault at Deletion ($)</th>
+                <th>Available Balance ($)</th>
+                <th>Total Wallet ($)</th>
+                <th>Deletion Date & Time</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-deleted-users-tbody">
+              <tr>
+                <td colspan="8" class="text-center py-4">No deleted user history recorded.</td>
               </tr>
             </tbody>
           </table>
@@ -277,7 +328,15 @@
           <h3><i class="fa-solid fa-folder-open text-gold"></i> Full User Data & Wallet Ledger</h3>
           <p id="ledger-user-sub" style="font-size: 0.82rem; color: #64748b; margin-top: 0.2rem;"></p>
         </div>
-        <button class="modal-close" onclick="closeAdminModal('modal-admin-user-ledger')">&times;</button>
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <button type="button" class="btn-emerald" id="ledger-btn-download-csv" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="downloadSingleUserLedgerCSV()">
+            <i class="fa-solid fa-file-excel"></i> Export User CSV
+          </button>
+          <button type="button" class="btn-danger-sm" id="ledger-btn-delete-user" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="promptDeleteUserFromLedger()">
+            <i class="fa-solid fa-trash-can"></i> Delete User
+          </button>
+          <button class="modal-close" onclick="closeAdminModal('modal-admin-user-ledger')">&times;</button>
+        </div>
       </div>
       <div class="modal-body">
         <!-- USER METRICS CARDS -->
@@ -351,6 +410,148 @@
         <p id="proof-viewer-info" class="margin-bottom-sm"><strong>UTR ID:</strong> <span id="proof-utr-val">N/A</span></p>
         <div class="full-proof-container">
           <img id="full-proof-img" src="" alt="Cloudinary Payment Proof Full Size" style="max-width: 100%; max-height: 70vh; border-radius: 12px; border: 2px solid #bae6fd; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRM PERMANENT USER DELETION -->
+  <div id="modal-confirm-delete-user" class="modal-overlay hidden">
+    <div class="modal-card" style="max-width: 520px;">
+      <div class="modal-header" style="border-bottom: 2px solid #fee2e2; background: #fff5f5;">
+        <h3 style="color: #dc2626;"><i class="fa-solid fa-triangle-exclamation"></i> Permanently Delete User?</h3>
+        <button class="modal-close" onclick="closeAdminModal('modal-confirm-delete-user')">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 1.5rem;">
+        <div style="background: #fef2f2; border: 1.5px solid #fecaca; border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem; color: #991b1b; font-weight: 700; margin-bottom: 0.35rem;">
+            <i class="fa-solid fa-circle-exclamation" style="font-size: 1.25rem;"></i>
+            <span>Permanent Deletion Warning</span>
+          </div>
+          <p style="font-size: 0.88rem; color: #7f1d1d; margin: 0; line-height: 1.45;">
+            Are you sure you want to permanently delete this user account? The user will be removed from active accounts, but their full history and records will be preserved in <strong>Previous Deletes</strong>.
+          </p>
+        </div>
+
+        <!-- Target User Summary Card -->
+        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 10px; padding: 1rem; margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.6rem;">
+            <div>
+              <div style="font-size: 1.05rem; font-weight: 800; color: #0f172a;" id="del-user-fullname">Full Name</div>
+              <div style="font-size: 0.85rem; font-weight: 700; color: #0284c7;" id="del-user-username">@username</div>
+            </div>
+            <span class="badge-neutral" style="font-size: 0.75rem;"><i class="fa-solid fa-phone"></i> <span id="del-user-phone">Phone</span></span>
+          </div>
+          
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; text-align: center; border-top: 1px dashed #cbd5e1; padding-top: 0.6rem;">
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.4rem;">
+              <div style="font-size: 0.68rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Deposits</div>
+              <div style="font-size: 0.9rem; font-weight: 800; color: #0369a1;" id="del-user-deposits">0</div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.4rem;">
+              <div style="font-size: 0.68rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Vault ($)</div>
+              <div style="font-size: 0.9rem; font-weight: 800; color: #0f172a;" id="del-user-vault">$0.00</div>
+            </div>
+            <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.4rem;">
+              <div style="font-size: 0.68rem; text-transform: uppercase; color: #64748b; font-weight: 700;">Wallet ($)</div>
+              <div style="font-size: 0.9rem; font-weight: 800; color: #15803d;" id="del-user-wallet">$0.00</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 1.25rem;">
+          <label for="del-user-reason" style="font-weight: 600; font-size: 0.85rem; margin-bottom: 0.35rem; display: block;">
+            <i class="fa-solid fa-clipboard-list"></i> Reason for Deletion (Optional Note):
+          </label>
+          <input type="text" id="del-user-reason" placeholder="e.g. Account terminated by admin request" class="form-control" style="width: 100%; padding: 0.55rem; border-radius: 8px; border: 1px solid #cbd5e1; font-size: 0.88rem;">
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+          <button type="button" class="btn-secondary" onclick="closeAdminModal('modal-confirm-delete-user')">
+            <i class="fa-solid fa-xmark"></i> Cancel / Keep User
+          </button>
+          <button type="button" id="btn-execute-delete-user" class="btn-danger" style="padding: 0.65rem 1.25rem; font-size: 0.9rem;" onclick="executeDeleteUser()">
+            <i class="fa-solid fa-trash-can"></i> Yes, Permanently Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ARCHIVED DELETED USER DATA LEDGER -->
+  <div id="modal-admin-deleted-user-ledger" class="modal-overlay hidden">
+    <div class="modal-card wide">
+      <div class="modal-header" style="background: #fff5f5; border-bottom: 2px solid #fee2e2;">
+        <div>
+          <h3 style="color: #dc2626;"><i class="fa-solid fa-box-archive"></i> Archived Deleted User Ledger</h3>
+          <p id="del-ledger-user-sub" style="font-size: 0.82rem; color: #64748b; margin-top: 0.2rem;"></p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+          <button type="button" class="btn-emerald" id="del-ledger-btn-restore" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="restoreDeletedUserFromLedger()">
+            <i class="fa-solid fa-rotate-left"></i> Restore User Account
+          </button>
+          <button class="modal-close" onclick="closeAdminModal('modal-admin-deleted-user-ledger')">&times;</button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <!-- ARCHIVED DELETION NOTICE BANNER -->
+        <div id="del-ledger-notice-banner" style="background: #fef2f2; border: 1.5px solid #fecaca; border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #991b1b;">
+        </div>
+
+        <!-- USER METRICS CARDS -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.85rem; margin-bottom: 1.25rem;">
+          <div style="background: #f1f5f9; border: 1.5px solid #cbd5e1; padding: 0.85rem; border-radius: 12px;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: #64748b;">Total Wallet at Deletion</div>
+            <div id="del-ledger-stat-total" style="font-size: 1.35rem; font-weight: 800; color: #0f172a;">$0.00</div>
+          </div>
+          <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; padding: 0.85rem; border-radius: 12px;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: #64748b;">Locked Vault Principal</div>
+            <div id="del-ledger-stat-vault" style="font-size: 1.25rem; font-weight: 700; color: #0f172a;">$0.00</div>
+          </div>
+          <div style="background: #f0fdf4; border: 1.5px solid #86efac; padding: 0.85rem; border-radius: 12px;">
+            <div style="font-size: 0.75rem; text-transform: uppercase; color: #166534;">Available Bonus Balance</div>
+            <div id="del-ledger-stat-avail" style="font-size: 1.25rem; font-weight: 700; color: #15803d;">$0.00</div>
+          </div>
+        </div>
+
+        <!-- FULL ARCHIVED DEPOSITS HISTORY TABLE -->
+        <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: #1e293b;"><i class="fa-solid fa-list-check text-blue"></i> Archived Deposits Snapshot</h4>
+        <div class="table-responsive" style="margin-bottom: 1.25rem; max-height: 250px; overflow-y: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Fund #</th>
+                <th>Deposit ID</th>
+                <th>Date Added</th>
+                <th>Amount (INR/USD)</th>
+                <th>UTR ID</th>
+                <th>Payout Progress</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="del-ledger-debits-tbody">
+              <tr><td colspan="7" class="text-center py-3">No deposits found.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- ARCHIVED WITHDRAWALS HISTORY -->
+        <h4 style="font-size: 0.95rem; margin-bottom: 0.5rem; color: #1e293b;"><i class="fa-solid fa-clock-rotate-left text-gold"></i> Archived Withdrawal History</h4>
+        <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Req ID</th>
+                <th>Date Requested</th>
+                <th>Amount ($)</th>
+                <th>Method</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="del-ledger-withdrawals-tbody">
+              <tr><td colspan="5" class="text-center py-3">No withdrawal requests found.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

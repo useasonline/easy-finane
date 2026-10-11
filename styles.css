@@ -2478,18 +2478,100 @@ input[type="range"] {
     font-size: 1.25rem;
   }
 
-  /* Table Mobile Scroll & Touch formatting */
+  /* TABLE VERTICAL MOBILE CARDS TRANSFORMATION */
   .table-responsive {
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: visible !important;
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
     margin-bottom: 0.5rem;
   }
 
-  .data-table th, .data-table td {
-    padding: 0.65rem 0.6rem;
-    font-size: 0.8rem;
-    white-space: nowrap;
+  .data-table {
+    display: block !important;
+    width: 100% !important;
+    border-collapse: separate !important;
+  }
+
+  .data-table thead {
+    display: none !important; /* Hide traditional horizontal header on mobile */
+  }
+
+  .data-table tbody {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.85rem !important;
+  }
+
+  .data-table tbody tr {
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1.5px solid #e2e8f0 !important;
+    border-radius: 16px !important;
+    padding: 1rem 1.15rem !important;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05) !important;
+    gap: 0.45rem !important;
+    transition: var(--transition-fast) !important;
+  }
+
+  .data-table tbody tr:hover {
+    border-color: #3b82f6 !important;
+    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.1) !important;
+  }
+
+  .data-table td {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding: 0.4rem 0 !important;
+    border-bottom: 1px dashed #e2e8f0 !important;
+    font-size: 0.88rem !important;
+    width: 100% !important;
+    white-space: normal !important; /* Allow details & account info to wrap naturally! */
+    word-break: break-word !important;
+  }
+
+  .data-table td:last-child {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  .data-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+    margin-right: 0.75rem;
+  }
+
+  /* Full-width vertical detail section for multiline content */
+  .data-table td[data-label="Details"],
+  .data-table td[data-label="Account / UPI Details"],
+  .data-table td[data-label="Cloudinary Payment Proof"],
+  .data-table td[data-label="Deposit Dates & Amounts"],
+  .data-table td[data-label="Full User Data Actions"],
+  .data-table td[data-label="Actions"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.35rem !important;
+  }
+
+  .data-table td[data-label="Details"] small,
+  .data-table td[data-label="Account / UPI Details"] small {
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    background: #f8fafc !important;
+    padding: 0.4rem 0.65rem !important;
+    border-radius: 8px !important;
+    border: 1px solid #cbd5e1 !important;
+    width: 100% !important;
+    display: block !important;
+    word-break: break-all !important;
   }
 
   /* Toast notification on mobile */
@@ -2664,4 +2746,61 @@ input[type="range"] {
 
 .phonepe-brand-header {
   box-shadow: 0 4px 14px rgba(95, 37, 159, 0.25);
+}
+
+/* Delete User & Previous Deletes UI Styles */
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+  color: #ffffff;
+  border: none;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 0.75rem 1.35rem;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: var(--transition-fast);
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.28);
+}
+
+.btn-danger:hover {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.38);
+}
+
+.badge-tag.danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.badge-status.danger {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.deleted-user-pill {
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  color: #be123c;
+  padding: 0.2rem 0.55rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
 }

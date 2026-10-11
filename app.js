@@ -143,6 +143,13 @@ function checkExistingSession() {
   if (storedUser) {
     try {
       currentUser = JSON.parse(storedUser);
+      const localDeleted = getLocalStore('deleted_users') || {};
+      if (currentUser && localDeleted[currentUser.username]) {
+        localStorage.removeItem('efinance_current_user');
+        currentUser = null;
+        navigateTo('login');
+        return;
+      }
       updateHeaderGreeting();
       navigateTo('home');
     } catch (e) {
@@ -506,7 +513,25 @@ async function handleLogin(event) {
     }
 
     if (!matchedUser) {
-      errorDiv.textContent = `No account found with username or email '${userInput}'. Please create an account.`;
+      let isDeletedAccount = false;
+      const localDeleted = getLocalStore('deleted_users') || {};
+      if (localDeleted[userInput]) {
+        isDeletedAccount = true;
+      } else {
+        for (let dk in localDeleted) {
+          const du = localDeleted[dk];
+          if (du.username && du.username.toLowerCase() === userInput || (du.email && du.email.toLowerCase() === userInput)) {
+            isDeletedAccount = true;
+            break;
+          }
+        }
+      }
+
+      if (isDeletedAccount) {
+        errorDiv.textContent = `This account has been permanently deleted by administrator. Please contact support.`;
+      } else {
+        errorDiv.textContent = `No account found with username or email '${userInput}'. Please create an account.`;
+      }
       errorDiv.classList.remove('hidden');
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -577,6 +602,16 @@ function detachUserListeners() {
 function loadUserDashboard() {
   if (!currentUser) return;
 
+  const localDeleted = getLocalStore('deleted_users') || {};
+  if (localDeleted[currentUser.username]) {
+    localStorage.removeItem('efinance_current_user');
+    currentUser = null;
+    detachUserListeners();
+    navigateTo('login');
+    showToast('Your account was deleted by the administrator.', 'error');
+    return;
+  }
+
   // Run automatic monthly payout scheduler for scheduled milestone dates
   autoProcessScheduledPayouts();
 
@@ -627,6 +662,15 @@ function loadUserDashboard() {
         localUsers[currentUser.username] = data;
         setLocalStore('users', localUsers);
         renderBalances(data);
+      } else {
+        const localDel = getLocalStore('deleted_users') || {};
+        if (currentUser && localDel[currentUser.username]) {
+          localStorage.removeItem('efinance_current_user');
+          currentUser = null;
+          detachUserListeners();
+          navigateTo('login');
+          showToast('Your account has been deleted by administrator.', 'error');
+        }
       }
     });
   } catch(e) {}
@@ -739,12 +783,12 @@ function loadUserDashboard() {
         let detailsText = w.method === 'UPI' ? `UPI: ${w.details?.upiId || 'N/A'}` : `Bank Acc: ${w.details?.accountNumber || 'N/A'}`;
 
         row.innerHTML = `
-          <td><code>#${w.id.substring(0, 8)}</code></td>
-          <td>${w.date}</td>
-          <td><strong class="text-green">$${parseFloat(w.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
-          <td><span class="badge-neutral">${w.method}</span></td>
-          <td><small>${detailsText}</small></td>
-          <td><span class="status-badge ${statusBadgeClass}"><i class="fa-solid ${statusIcon}"></i> ${w.status}</span></td>
+          <td data-label="Request ID"><code>#${w.id.substring(0, 8)}</code></td>
+          <td data-label="Date">${w.date}</td>
+          <td data-label="Amount"><strong class="text-green">$${parseFloat(w.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></td>
+          <td data-label="Method"><span class="badge-neutral">${w.method}</span></td>
+          <td data-label="Details"><small>${detailsText}</small></td>
+          <td data-label="Status"><span class="status-badge ${statusBadgeClass}"><i class="fa-solid ${statusIcon}"></i> ${w.status}</span></td>
         `;
         tbody.appendChild(row);
       });
