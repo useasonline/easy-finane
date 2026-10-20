@@ -138,6 +138,40 @@ a:hover {
   pointer-events: none;
 }
 
+/* ── TAP SCREEN (pre-play state) ── */
+.splash-tap-screen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splash-tap-screen.hidden {
+  display: none;
+}
+
+/* ── PLAYING HUD (while video plays) ── */
+.splash-playing-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.splash-playing-hud > * {
+  pointer-events: all;
+}
+
+.splash-playing-hud.hidden {
+  display: none;
+}
+
+
 /* ── TOP BAR ── */
 .splash-top-bar {
   position: absolute;
@@ -263,6 +297,24 @@ a:hover {
   max-width: 480px;
   margin-left: auto;
   margin-right: auto;
+}
+
+/* ── TAP SCREEN: audio button — top-right absolute ── */
+.tap-audio-top-right {
+  position: absolute;
+  top: 1.4rem;
+  right: 1.75rem;
+  z-index: 3;
+  animation: slideDown 0.55s 0.15s ease-out both;
+}
+
+/* ── TAP SCREEN: skip button — bottom-right absolute ── */
+.tap-skip-bottom-right {
+  position: absolute;
+  bottom: 2rem;
+  right: 1.75rem;
+  z-index: 3;
+  animation: slideUp 0.55s 0.2s ease-out both;
 }
 
 .splash-stat {
@@ -434,8 +486,10 @@ a:hover {
   .splash-brand-name {
     font-size: 1.2rem;
   }
-  .splash-sound-btn span {
-    display: none; /* Show icon only on very small screens */
+  /* On mobile: hide label text in sound buttons, icon only */
+  .splash-sound-btn span,
+  #tap-audio-label {
+    display: none;
   }
   .splash-sound-btn {
     padding: 0.5rem 0.75rem;
@@ -445,6 +499,14 @@ a:hover {
   }
   .splash-stat-val {
     font-size: 1.15rem;
+  }
+  .tap-audio-top-right {
+    top: 1rem;
+    right: 1.1rem;
+  }
+  .tap-skip-bottom-right {
+    bottom: 1.5rem;
+    right: 1.1rem;
   }
 }
 

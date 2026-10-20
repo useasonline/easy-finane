@@ -107,15 +107,63 @@ function isDesktopDevice() {
   return hasFinePointer && !hasTouch;
 }
 
-// Called when user clicks anywhere on splash — guarantees video plays inside a user-gesture context
-function splashClickPlay() {
-  const video = document.getElementById('splash-intro-video');
-  if (!video || !video.paused) return;
+// Called when user taps the play button on the splash tap-screen
+function startSplashVideo() {
+  const video      = document.getElementById('splash-intro-video');
+  const tapScreen  = document.getElementById('splash-tap-screen');
+  const playingHud = document.getElementById('splash-playing-hud');
+  if (!video) return;
+
+  // Start muted first (browser autoplay policy)
   video.muted = true;
-  video.play().then(() => {
-    if (isDesktopDevice()) { video.muted = false; updateSoundUI(true); }
-    else { updateSoundUI(false); }
-  }).catch(() => {});
+  const p = video.play();
+  if (p) {
+    p.then(() => {
+      // Honour the user's pre-play audio choice
+      video.muted = !_tapAudioEnabled;
+      updateSoundUI(_tapAudioEnabled);
+      // Swap screens: hide tap screen, show playing HUD
+      if (tapScreen)  tapScreen.classList.add('hidden');
+      if (playingHud) playingHud.classList.remove('hidden');
+    }).catch(() => {
+      // Blocked — stay muted, still show playing HUD
+      video.muted = true;
+      updateSoundUI(false);
+      if (tapScreen)  tapScreen.classList.add('hidden');
+      if (playingHud) playingHud.classList.remove('hidden');
+    });
+  }
+}
+
+// Legacy alias (kept for safety)
+function splashClickPlay() { startSplashVideo(); }
+
+
+// ── Tap-screen audio button: toggle pre-play mute preference ──
+// (state is stored so startSplashVideo can honour it)
+let _tapAudioEnabled = false; // set properly in initSplashVideo
+
+function toggleTapAudio() {
+  _tapAudioEnabled = !_tapAudioEnabled;
+  updateTapAudioUI(_tapAudioEnabled);
+  // If video is already playing, apply immediately
+  const video = document.getElementById('splash-intro-video');
+  if (video && !video.paused) {
+    video.muted = !_tapAudioEnabled;
+    updateSoundUI(_tapAudioEnabled);
+  }
+}
+
+function updateTapAudioUI(on) {
+  const icon  = document.getElementById('tap-audio-icon');
+  const label = document.getElementById('tap-audio-label');
+  const btn   = document.getElementById('tap-audio-btn');
+  if (icon)  icon.className    = on ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+  if (label) label.textContent = on ? 'Sound On' : 'Tap for Sound';
+  if (btn) {
+    if (on) btn.classList.add('sound-on');
+    else    btn.classList.remove('sound-on');
+  }
 }
 
 function initSplashVideo() {
@@ -124,6 +172,10 @@ function initSplashVideo() {
   const timerEl     = document.getElementById('splash-video-timer');
 
   if (!video) return;
+
+  // Set tap-screen audio default: ON for desktop, OFF for mobile
+  _tapAudioEnabled = isDesktopDevice();
+  updateTapAudioUI(_tapAudioEnabled);
 
   // Always start muted (browser requirement for autoplay)
   video.muted = true;
@@ -137,12 +189,15 @@ function initSplashVideo() {
         if (isDesktopDevice()) {
           video.muted = false;
           updateSoundUI(true);
+          updateTapAudioUI(true);
         } else {
           updateSoundUI(false);
+          updateTapAudioUI(false);
         }
       }).catch(() => {
         // Browser blocked autoplay even with muted — just keep muted and show timer
         updateSoundUI(false);
+        updateTapAudioUI(false);
         // Try one more time explicitly muted
         video.muted = true;
         video.play().catch(() => {});

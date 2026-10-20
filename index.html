@@ -53,8 +53,8 @@
     <!-- ── TAP TO PLAY SCREEN (shown before video starts) ── -->
     <div id="splash-tap-screen" class="splash-tap-screen">
 
-      <!-- Brand badge at top -->
-      <div class="splash-logo-row" style="position:absolute;top:1.5rem;left:1.75rem;">
+      <!-- Brand badge at top-left -->
+      <div class="splash-logo-row" style="position:absolute;top:1.5rem;left:1.75rem;z-index:3;">
         <div class="splash-logo-badge">
           <img src="logo.png" alt="Dollar Flow Logo" class="splash-logo-img">
         </div>
@@ -63,6 +63,12 @@
           <span class="splash-brand-tagline">Smart Finance · Real Returns</span>
         </div>
       </div>
+
+      <!-- Audio toggle — top-right -->
+      <button id="tap-audio-btn" class="splash-sound-btn tap-audio-top-right" onclick="toggleTapAudio()" title="Toggle Audio">
+        <i class="fa-solid fa-volume-xmark" id="tap-audio-icon"></i>
+        <span id="tap-audio-label">Tap for Sound</span>
+      </button>
 
       <!-- Big centered play button -->
       <div class="tap-play-center" onclick="startSplashVideo()">
@@ -73,8 +79,8 @@
         <p class="tap-play-label">Tap to Watch Intro</p>
       </div>
 
-      <!-- Skip Intro button -->
-      <div class="tap-stats-bottom">
+      <!-- Skip Intro — bottom-right -->
+      <div class="tap-skip-bottom-right">
         <button id="btn-skip-splash" class="btn-skip">
           Skip Intro <i class="fa-solid fa-forward-fast"></i>
         </button>
