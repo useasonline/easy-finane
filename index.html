@@ -36,12 +36,14 @@
   <!-- ========================================== -->
   <div id="splash-screen" class="splash-container">
 
-    <!-- FULL-SCREEN BACKGROUND VIDEO (no autoplay — starts on tap) -->
+    <!-- FULL-SCREEN BACKGROUND VIDEO — autoplay muted, unmuted by JS on desktop -->
     <video
       id="splash-intro-video"
       class="splash-bg-video"
+      autoplay
+      muted
       playsinline
-      preload="metadata"
+      preload="auto"
       poster="logo.png"
     >
       <source src="https://www.dollarflow.online/intro.mp4" type="video/mp4">
@@ -50,49 +52,10 @@
     <!-- DARK CINEMATIC OVERLAY -->
     <div class="splash-overlay"></div>
 
-    <!-- ── TAP TO PLAY SCREEN (shown before video starts) ── -->
-    <div id="splash-tap-screen" class="splash-tap-screen">
+    <!-- ── PLAYING HUD (always visible while splash is shown) ── -->
+    <div id="splash-playing-hud" class="splash-playing-hud">
 
-      <!-- Brand badge at top-left -->
-      <div class="splash-logo-row" style="position:absolute;top:1.5rem;left:1.75rem;z-index:3;">
-        <div class="splash-logo-badge">
-          <img src="logo.png" alt="Dollar Flow Logo" class="splash-logo-img">
-        </div>
-        <div class="splash-brand-info">
-          <span class="splash-brand-name">Dollar Flow</span>
-          <span class="splash-brand-tagline">Smart Finance · Real Returns</span>
-        </div>
-      </div>
-
-      <!-- Audio toggle — top-right -->
-      <button id="tap-audio-btn" class="splash-sound-btn" onclick="toggleTapAudio()" title="Toggle Audio"
-        style="position:absolute;top:1.4rem;right:1.75rem;z-index:3;">
-        <i class="fa-solid fa-volume-xmark" id="tap-audio-icon"></i>
-        <span id="tap-audio-label">Tap for Sound</span>
-      </button>
-
-      <!-- Big centered play button -->
-      <div class="tap-play-center" onclick="startSplashVideo()">
-        <div class="tap-play-glow"></div>
-        <div class="tap-play-btn">
-          <i class="fa-solid fa-play"></i>
-        </div>
-        <p class="tap-play-label">Tap to Watch Intro</p>
-      </div>
-
-      <!-- Skip Intro — bottom-right -->
-      <div style="position:absolute;bottom:2rem;right:1.75rem;z-index:3;">
-        <button id="btn-skip-splash" class="btn-skip">
-          Skip Intro <i class="fa-solid fa-forward-fast"></i>
-        </button>
-      </div>
-
-    </div>
-
-    <!-- ── PLAYING HUD (shown while video plays) ── -->
-    <div id="splash-playing-hud" class="splash-playing-hud hidden">
-
-      <!-- TOP BAR: Logo + Sound -->
+      <!-- TOP BAR: Logo (left) + Sound toggle (right) -->
       <div class="splash-top-bar">
         <div class="splash-logo-row">
           <div class="splash-logo-badge">
@@ -104,20 +67,20 @@
           </div>
         </div>
         <button class="splash-sound-btn" id="splash-sound-btn" onclick="toggleVideoSound()" title="Toggle Sound">
-          <i class="fa-solid fa-volume-high" id="video-sound-icon"></i>
-          <span id="sound-btn-label">Sound On</span>
+          <i class="fa-solid fa-volume-xmark" id="video-sound-icon"></i>
+          <span id="sound-btn-label">Tap for Sound</span>
         </button>
       </div>
 
-      <!-- BOTTOM: Progress + Timer + Skip -->
+      <!-- BOTTOM: Progress bar + Timer (left) + Skip (right) -->
       <div class="splash-bottom-hud">
         <div class="splash-video-progress">
           <div class="splash-video-progress-bar" id="splash-video-progress-bar"></div>
         </div>
         <div class="splash-hud-actions">
           <span class="splash-video-timer" id="splash-video-timer">0s</span>
-          <button class="btn-skip" onclick="hideSplash()">
-            Skip <i class="fa-solid fa-forward-fast"></i>
+          <button class="btn-skip" id="btn-skip-splash" onclick="hideSplash()">
+            Skip Intro <i class="fa-solid fa-forward-fast"></i>
           </button>
         </div>
       </div>
