@@ -34,16 +34,14 @@
   <!-- ========================================== -->
   <!-- 1. SPLASH SCREEN                           -->
   <!-- ========================================== -->
-  <div id="splash-screen" class="splash-container" onclick="splashClickPlay()">
+  <div id="splash-screen" class="splash-container">
 
-    <!-- FULL-SCREEN BACKGROUND VIDEO -->
+    <!-- FULL-SCREEN BACKGROUND VIDEO (no autoplay — starts on tap) -->
     <video
       id="splash-intro-video"
       class="splash-bg-video"
-      autoplay
-      muted
       playsinline
-      preload="auto"
+      preload="metadata"
       poster="logo.png"
     >
       <source src="https://www.dollarflow.online/intro.mp4" type="video/mp4">
@@ -52,9 +50,11 @@
     <!-- DARK CINEMATIC OVERLAY -->
     <div class="splash-overlay"></div>
 
-    <!-- TOP BAR: Logo + Brand -->
-    <div class="splash-top-bar">
-      <div class="splash-logo-row">
+    <!-- ── TAP TO PLAY SCREEN (shown before video starts) ── -->
+    <div id="splash-tap-screen" class="splash-tap-screen">
+
+      <!-- Brand badge at top -->
+      <div class="splash-logo-row" style="position:absolute;top:1.5rem;left:1.75rem;">
         <div class="splash-logo-badge">
           <img src="logo.png" alt="Dollar Flow Logo" class="splash-logo-img">
         </div>
@@ -63,43 +63,74 @@
           <span class="splash-brand-tagline">Smart Finance · Real Returns</span>
         </div>
       </div>
-      <!-- Sound Toggle Button -->
-      <button class="splash-sound-btn" id="splash-sound-btn" onclick="event.stopPropagation(); toggleVideoSound()" title="Toggle Sound">
-        <i class="fa-solid fa-volume-xmark" id="video-sound-icon"></i>
-        <span id="sound-btn-label">Tap for Sound</span>
-      </button>
-    </div>
 
-    <!-- BOTTOM HUD: Stats + Progress + Skip -->
-    <div class="splash-bottom-hud">
-      <div class="splash-stats-row">
-        <div class="splash-stat">
-          <span class="splash-stat-val">$2<small>/mo</small></span>
-          <span class="splash-stat-label">Monthly Bonus</span>
+      <!-- Big centered play button -->
+      <div class="tap-play-center" onclick="startSplashVideo()">
+        <div class="tap-play-glow"></div>
+        <div class="tap-play-btn">
+          <i class="fa-solid fa-play"></i>
         </div>
-        <div class="splash-stat-divider"></div>
-        <div class="splash-stat">
-          <span class="splash-stat-val">240%</span>
-          <span class="splash-stat-label">Annual ROI</span>
-        </div>
-        <div class="splash-stat-divider"></div>
-        <div class="splash-stat">
-          <span class="splash-stat-val">0%</span>
-          <span class="splash-stat-label">Hidden Fees</span>
-        </div>
+        <p class="tap-play-label">Tap to Watch Intro</p>
       </div>
 
-      <!-- Video progress bar -->
-      <div class="splash-video-progress">
-        <div class="splash-video-progress-bar" id="splash-video-progress-bar"></div>
-      </div>
-
-      <div class="splash-hud-actions">
-        <span class="splash-video-timer" id="splash-video-timer">Loading...</span>
-        <button id="btn-skip-splash" class="btn-skip" onclick="event.stopPropagation()">
-          Skip <i class="fa-solid fa-forward-fast"></i>
+      <!-- Stats row at bottom -->
+      <div class="tap-stats-bottom">
+        <div class="splash-stats-row">
+          <div class="splash-stat">
+            <span class="splash-stat-val">$2<small>/mo</small></span>
+            <span class="splash-stat-label">Monthly Bonus</span>
+          </div>
+          <div class="splash-stat-divider"></div>
+          <div class="splash-stat">
+            <span class="splash-stat-val">240%</span>
+            <span class="splash-stat-label">Annual ROI</span>
+          </div>
+          <div class="splash-stat-divider"></div>
+          <div class="splash-stat">
+            <span class="splash-stat-val">0%</span>
+            <span class="splash-stat-label">Hidden Fees</span>
+          </div>
+        </div>
+        <button id="btn-skip-splash" class="btn-skip" style="margin-top:1rem;">
+          Skip Intro <i class="fa-solid fa-forward-fast"></i>
         </button>
       </div>
+
+    </div>
+
+    <!-- ── PLAYING HUD (shown while video plays) ── -->
+    <div id="splash-playing-hud" class="splash-playing-hud hidden">
+
+      <!-- TOP BAR: Logo + Sound -->
+      <div class="splash-top-bar">
+        <div class="splash-logo-row">
+          <div class="splash-logo-badge">
+            <img src="logo.png" alt="Dollar Flow Logo" class="splash-logo-img">
+          </div>
+          <div class="splash-brand-info">
+            <span class="splash-brand-name">Dollar Flow</span>
+            <span class="splash-brand-tagline">Smart Finance · Real Returns</span>
+          </div>
+        </div>
+        <button class="splash-sound-btn" id="splash-sound-btn" onclick="toggleVideoSound()" title="Toggle Sound">
+          <i class="fa-solid fa-volume-high" id="video-sound-icon"></i>
+          <span id="sound-btn-label">Sound On</span>
+        </button>
+      </div>
+
+      <!-- BOTTOM: Progress + Timer + Skip -->
+      <div class="splash-bottom-hud">
+        <div class="splash-video-progress">
+          <div class="splash-video-progress-bar" id="splash-video-progress-bar"></div>
+        </div>
+        <div class="splash-hud-actions">
+          <span class="splash-video-timer" id="splash-video-timer">0s</span>
+          <button class="btn-skip" onclick="hideSplash()">
+            Skip <i class="fa-solid fa-forward-fast"></i>
+          </button>
+        </div>
+      </div>
+
     </div>
 
   </div>
