@@ -89,10 +89,8 @@ document.addEventListener('DOMContentLoaded', () => {
     debitDateInput.value = today;
   }
 
-  // Handle Splash Screen Transition
-  setTimeout(() => {
-    hideSplash();
-  }, 2400);
+  // ── Splash Screen Video Logic ──────────────────────────────────
+  initSplashVideo();
 
   document.getElementById('btn-skip-splash')?.addEventListener('click', hideSplash);
 
@@ -100,17 +98,132 @@ document.addEventListener('DOMContentLoaded', () => {
   checkExistingSession();
 });
 
+// ── Detect if device is desktop / laptop (not a touch-primary device) ──
+function isDesktopDevice() {
+  // True if no touch points AND pointer is fine (mouse) — laptop / PC
+  const hasTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
+  // Desktop = fine pointer AND no touch, OR screen is wide (≥ 1024px) with no touch
+  return hasFinePointer && !hasTouch;
+}
+
+// Called when user clicks anywhere on splash — guarantees video plays inside a user-gesture context
+function splashClickPlay() {
+  const video = document.getElementById('splash-intro-video');
+  if (!video || !video.paused) return;
+  video.muted = true;
+  video.play().then(() => {
+    if (isDesktopDevice()) { video.muted = false; updateSoundUI(true); }
+    else { updateSoundUI(false); }
+  }).catch(() => {});
+}
+
+function initSplashVideo() {
+  const video       = document.getElementById('splash-intro-video');
+  const progressBar = document.getElementById('splash-video-progress-bar');
+  const timerEl     = document.getElementById('splash-video-timer');
+
+  if (!video) return;
+
+  // Always start muted (browser requirement for autoplay)
+  video.muted = true;
+
+  // Force play — handle both success and block
+  function tryPlay() {
+    const p = video.play();
+    if (p) {
+      p.then(() => {
+        // Unmute on desktop/laptop after video starts
+        if (isDesktopDevice()) {
+          video.muted = false;
+          updateSoundUI(true);
+        } else {
+          updateSoundUI(false);
+        }
+      }).catch(() => {
+        // Browser blocked autoplay even with muted — just keep muted and show timer
+        updateSoundUI(false);
+        // Try one more time explicitly muted
+        video.muted = true;
+        video.play().catch(() => {});
+      });
+    }
+  }
+
+  // Try play immediately
+  tryPlay();
+
+  // Also try on first user interaction as final fallback
+  const startOnInteract = () => {
+    tryPlay();
+    document.removeEventListener('click', startOnInteract);
+    document.removeEventListener('touchstart', startOnInteract);
+  };
+  document.addEventListener('click', startOnInteract, { once: true });
+  document.addEventListener('touchstart', startOnInteract, { once: true });
+
+  // Live progress bar
+  video.addEventListener('timeupdate', () => {
+    if (!video.duration) return;
+    const pct = (video.currentTime / video.duration) * 100;
+    if (progressBar) progressBar.style.width = pct + '%';
+    const rem = Math.ceil(video.duration - video.currentTime);
+    if (timerEl) timerEl.textContent = rem > 0 ? rem + 's remaining' : 'Finishing…';
+  });
+
+  // Show duration when ready
+  video.addEventListener('loadedmetadata', () => {
+    if (timerEl) timerEl.textContent = Math.ceil(video.duration) + 's';
+  });
+
+  // Auto-advance when video finishes
+  video.addEventListener('ended', () => {
+    if (progressBar) progressBar.style.width = '100%';
+    if (timerEl) timerEl.textContent = 'Done!';
+    setTimeout(hideSplash, 500);
+  });
+
+  // Error: skip splash
+  video.addEventListener('error', (e) => {
+    console.warn('Video error, skipping:', e);
+    hideSplash();
+  });
+}
+
 function hideSplash() {
   const splash = document.getElementById('splash-screen');
   const appContainer = document.getElementById('app-container');
-  
   if (splash && !splash.classList.contains('fade-out')) {
     splash.classList.add('fade-out');
+    const video = document.getElementById('splash-intro-video');
+    if (video) video.pause();
     setTimeout(() => {
       splash.style.display = 'none';
       if (appContainer) appContainer.classList.remove('app-hidden');
-    }, 500);
+    }, 800);
   }
+}
+
+// ── Shared helper: update sound button UI state ──
+function updateSoundUI(soundOn, btn, icon, label) {
+  if (!btn) {
+    btn   = document.getElementById('splash-sound-btn');
+    icon  = document.getElementById('video-sound-icon');
+    label = document.getElementById('sound-btn-label');
+  }
+  if (icon)  icon.className    = soundOn ? 'fa-solid fa-volume-high' : 'fa-solid fa-volume-xmark';
+  if (label) label.textContent = soundOn ? 'Sound On' : 'Tap for Sound';
+  if (btn) {
+    if (soundOn) btn.classList.add('sound-on');
+    else         btn.classList.remove('sound-on');
+  }
+}
+
+function toggleVideoSound() {
+  const video = document.getElementById('splash-intro-video');
+  if (!video) return;
+  video.muted = !video.muted;
+  updateSoundUI(!video.muted);
 }
 
 // ==========================================================================

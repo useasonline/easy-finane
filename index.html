@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#ffffff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <title>E Finance - Easy Finance Solutions</title>
-  <meta name="description" content="E Finance (Easy Finance) - Smart financial planning, monthly savings schemes, debits, and instant payouts.">
+  <title>Dollar Flow - Smart Financial Growth Platform</title>
+  <meta name="description" content="Dollar Flow - Smart financial planning, monthly savings schemes, debits, and instant payouts. Earn $2 USD/month bonus.">
   <link rel="icon" type="image/png" href="logo.png">
   
   <!-- Google Fonts -->
@@ -34,22 +34,74 @@
   <!-- ========================================== -->
   <!-- 1. SPLASH SCREEN                           -->
   <!-- ========================================== -->
-  <div id="splash-screen" class="splash-container">
-    <div class="splash-content">
-      <div class="logo-wrapper">
-        <div class="logo-glow"></div>
-        <div class="logo-img-badge">
-          <img src="logo.png" alt="E Finance Logo" class="app-web-logo">
+  <div id="splash-screen" class="splash-container" onclick="splashClickPlay()">
+
+    <!-- FULL-SCREEN BACKGROUND VIDEO -->
+    <video
+      id="splash-intro-video"
+      class="splash-bg-video"
+      autoplay
+      muted
+      playsinline
+      preload="auto"
+      poster="logo.png"
+    >
+      <source src="https://www.dollarflow.online/intro.mp4" type="video/mp4">
+    </video>
+
+    <!-- DARK CINEMATIC OVERLAY -->
+    <div class="splash-overlay"></div>
+
+    <!-- TOP BAR: Logo + Brand -->
+    <div class="splash-top-bar">
+      <div class="splash-logo-row">
+        <div class="splash-logo-badge">
+          <img src="logo.png" alt="Dollar Flow Logo" class="splash-logo-img">
+        </div>
+        <div class="splash-brand-info">
+          <span class="splash-brand-name">Dollar Flow</span>
+          <span class="splash-brand-tagline">Smart Finance · Real Returns</span>
         </div>
       </div>
-      <h1 class="splash-title">E Finance</h1>
-      <p class="splash-tagline">Easy Finance Solutions</p>
-      
-      <div class="splash-loader">
-        <div class="loader-bar"></div>
-      </div>
-      <button id="btn-skip-splash" class="btn-skip">Get Started <i class="fa-solid fa-arrow-right"></i></button>
+      <!-- Sound Toggle Button -->
+      <button class="splash-sound-btn" id="splash-sound-btn" onclick="event.stopPropagation(); toggleVideoSound()" title="Toggle Sound">
+        <i class="fa-solid fa-volume-xmark" id="video-sound-icon"></i>
+        <span id="sound-btn-label">Tap for Sound</span>
+      </button>
     </div>
+
+    <!-- BOTTOM HUD: Stats + Progress + Skip -->
+    <div class="splash-bottom-hud">
+      <div class="splash-stats-row">
+        <div class="splash-stat">
+          <span class="splash-stat-val">$2<small>/mo</small></span>
+          <span class="splash-stat-label">Monthly Bonus</span>
+        </div>
+        <div class="splash-stat-divider"></div>
+        <div class="splash-stat">
+          <span class="splash-stat-val">240%</span>
+          <span class="splash-stat-label">Annual ROI</span>
+        </div>
+        <div class="splash-stat-divider"></div>
+        <div class="splash-stat">
+          <span class="splash-stat-val">0%</span>
+          <span class="splash-stat-label">Hidden Fees</span>
+        </div>
+      </div>
+
+      <!-- Video progress bar -->
+      <div class="splash-video-progress">
+        <div class="splash-video-progress-bar" id="splash-video-progress-bar"></div>
+      </div>
+
+      <div class="splash-hud-actions">
+        <span class="splash-video-timer" id="splash-video-timer">Loading...</span>
+        <button id="btn-skip-splash" class="btn-skip" onclick="event.stopPropagation()">
+          Skip <i class="fa-solid fa-forward-fast"></i>
+        </button>
+      </div>
+    </div>
+
   </div>
 
   <!-- MAIN APP CONTAINER -->
@@ -59,10 +111,10 @@
     <header class="app-header">
       <div class="header-content">
         <div class="brand-logo" onclick="navigateTo('home')">
-          <img src="logo.png" alt="E Finance Logo" class="header-logo-img">
+          <img src="logo.png" alt="Dollar Flow Logo" class="header-logo-img">
           <div class="brand-text">
-            <span class="brand-name">E Finance</span>
-            <span class="brand-sub">Easy Finance</span>
+            <span class="brand-name">Dollar Flow</span>
+            <span class="brand-sub">Smart Finance Platform</span>
           </div>
         </div>
 
@@ -89,9 +141,9 @@
       <div class="auth-card">
         <div class="auth-header">
           <div class="auth-logo-box">
-            <img src="logo.png" alt="E Finance Logo" class="auth-logo-img">
+            <img src="logo.png" alt="Dollar Flow Logo" class="auth-logo-img">
           </div>
-          <h2>Welcome to E Finance</h2>
+          <h2>Welcome to Dollar Flow</h2>
           <p>Sign in to manage your savings & earnings</p>
         </div>
 
@@ -129,10 +181,10 @@
       <div class="auth-card wide">
         <div class="auth-header">
           <div class="auth-logo-box">
-            <img src="logo.png" alt="E Finance Logo" class="auth-logo-img">
+            <img src="logo.png" alt="Dollar Flow Logo" class="auth-logo-img">
           </div>
           <h2>Create New Account</h2>
-          <p>Join Easy Finance to start your 12-month growth scheme</p>
+          <p>Join Dollar Flow to start your 12-month growth scheme</p>
         </div>
 
         <form id="form-register" onsubmit="handleRegister(event)">
